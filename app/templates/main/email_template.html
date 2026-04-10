@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Daily News Alert — Seamless Digital Automations</title>
+</head>
+<body style="margin:0;padding:0;background:#edf2f8;font-family:'Segoe UI',Arial,sans-serif;color:#1a2a6c;">
+
+  <!-- Outer wrapper -->
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#edf2f8;padding:32px 16px;">
+    <tr>
+      <td align="center">
+
+        <!-- Email card -->
+        <table width="640" cellpadding="0" cellspacing="0"
+          style="max-width:640px;width:100%;background:#ffffff;border-radius:20px;
+                 overflow:hidden;box-shadow:0 8px 32px rgba(20,38,92,0.10);">
+
+          <!-- ── HEADER ── -->
+          <tr>
+            <td style="background:linear-gradient(135deg,#122460 0%,#203887 60%,#3d65e0 100%);
+                       padding:36px 40px 32px;">
+              <table width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td>
+                    <!-- Logo placeholder — replace src with your actual logo URL -->
+                    <div style="font-size:1.6rem;font-weight:800;color:#fff;
+                                letter-spacing:-0.03em;">
+                      seamless<span style="opacity:0.55;">∞</span>
+                    </div>
+                    <div style="font-size:0.72rem;font-weight:600;color:rgba(255,255,255,0.55);
+                                letter-spacing:0.1em;text-transform:uppercase;margin-top:2px;">
+                      Seamless Digital Automations
+                    </div>
+                  </td>
+                  <td align="right" style="vertical-align:middle;">
+                    <div style="background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.2);
+                                border-radius:999px;padding:6px 16px;display:inline-block;
+                                font-size:0.78rem;font-weight:700;color:#fff;letter-spacing:0.04em;">
+                      Daily News Alert
+                    </div>
+                  </td>
+                </tr>
+              </table>
+
+              <div style="margin-top:28px;">
+                <div style="font-size:1.55rem;font-weight:800;color:#fff;line-height:1.2;">
+                  Today's Published News
+                </div>
+                <div style="font-size:0.9rem;color:rgba(255,255,255,0.78);margin-top:6px;">
+                  {{ date_label }} &nbsp;·&nbsp; {{ news_items|length }} article(s)
+                </div>
+              </div>
+            </td>
+          </tr>
+
+          <!-- ── INTRO ── -->
+          <tr>
+            <td style="padding:28px 40px 8px;">
+              <p style="margin:0;font-size:0.95rem;line-height:1.7;color:#3a4a80;">
+                Hello,<br><br>
+                Please find below today's curated news articles published via the
+                <strong>Seamless Daily Alert Vault</strong>.
+                PDFs for each article are attached to this email.
+              </p>
+            </td>
+          </tr>
+
+          <!-- ── NEWS TABLE ── -->
+          <tr>
+            <td style="padding:20px 40px 8px;">
+              <table width="100%" cellpadding="0" cellspacing="0"
+                style="border-collapse:collapse;border-radius:12px;overflow:hidden;
+                       border:1px solid #dce6f5;">
+
+                <!-- Table header -->
+                <tr style="background:#f0f4fb;">
+                  <td style="padding:10px 14px;font-size:0.67rem;font-weight:800;
+                             text-transform:uppercase;letter-spacing:0.08em;color:#7a8094;
+                             border-bottom:1px solid #dce6f5;white-space:nowrap;width:36px;">
+                    #
+                  </td>
+                  <td style="padding:10px 14px;font-size:0.67rem;font-weight:800;
+                             text-transform:uppercase;letter-spacing:0.08em;color:#7a8094;
+                             border-bottom:1px solid #dce6f5;white-space:nowrap;">
+                    News Type
+                  </td>
+                  <td style="padding:10px 14px;font-size:0.67rem;font-weight:800;
+                             text-transform:uppercase;letter-spacing:0.08em;color:#7a8094;
+                             border-bottom:1px solid #dce6f5;">
+                    News Headline
+                  </td>
+                  <td style="padding:10px 14px;font-size:0.67rem;font-weight:800;
+                             text-transform:uppercase;letter-spacing:0.08em;color:#7a8094;
+                             border-bottom:1px solid #dce6f5;white-space:nowrap;">
+                    Source
+                  </td>
+                </tr>
+
+                <!-- News rows -->
+                {% for item in news_items %}
+                <tr style="background:{{ '#fafcff' if loop.index % 2 == 0 else '#ffffff' }};">
+                  <td style="padding:12px 14px;font-size:0.82rem;font-weight:700;
+                             color:#7a8094;border-bottom:1px solid #edf1f7;
+                             vertical-align:top;">
+                    {{ loop.index }}
+                  </td>
+                  <td style="padding:12px 14px;font-size:0.82rem;color:#3a4a80;
+                             border-bottom:1px solid #edf1f7;vertical-align:top;
+                             white-space:nowrap;">
+                    {{ item.news_type or '—' }}
+                  </td>
+                  <td style="padding:12px 14px;font-size:0.85rem;font-weight:600;
+                             color:#1a2a6c;border-bottom:1px solid #edf1f7;
+                             vertical-align:top;line-height:1.5;">
+                    {% if item.news_url %}
+                      <a href="{{ item.news_url }}"
+                        style="color:#2f55d4;text-decoration:none;font-weight:700;">
+                        {{ item.news_headline or '—' }}
+                      </a>
+                    {% else %}
+                      {{ item.news_headline or '—' }}
+                    {% endif %}
+                  </td>
+                  <td style="padding:12px 14px;font-size:0.78rem;color:#2f55d4;
+                             border-bottom:1px solid #edf1f7;vertical-align:top;
+                             word-break:break-all;">
+                    {% if item.news_url %}
+                      <a href="{{ item.news_url }}"
+                        style="color:#2f55d4;text-decoration:none;">
+                        View Article →
+                      </a>
+                    {% else %}
+                      —
+                    {% endif %}
+                  </td>
+                </tr>
+                {% endfor %}
+
+              </table>
+            </td>
+          </tr>
+
+          <!-- ── PDF NOTE ── -->
+          <tr>
+            <td style="padding:20px 40px 8px;">
+              <div style="background:#f0f4fb;border:1px solid #dce6f5;border-radius:12px;
+                          padding:14px 18px;font-size:0.85rem;color:#3a4a80;line-height:1.6;">
+                📎 <strong>{{ news_items|length }} PDF(s) attached</strong> — one per article.
+                Each PDF contains the full content of the respective news article.
+              </div>
+            </td>
+          </tr>
+
+          <!-- ── FOOTER ── -->
+          <tr>
+            <td style="padding:28px 40px 36px;">
+              <hr style="border:none;border-top:1px solid #e8eef8;margin:0 0 22px;">
+              <table width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="font-size:0.8rem;color:#9aa0b5;line-height:1.6;">
+                    This is an automated email from the
+                    <strong style="color:#3a4a80;">Seamless Daily Alert Vault</strong>.<br>
+                    Please do not reply to this email.
+                  </td>
+                  <td align="right" style="vertical-align:top;">
+                    <div style="font-size:0.75rem;color:#b0b8cc;">
+                      {{ date_label }}
+                    </div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+        </table>
+        <!-- /email card -->
+
+        <!-- bottom note -->
+        <p style="margin-top:18px;font-size:0.76rem;color:#9aa0b5;text-align:center;">
+          © Seamless Digital Automations &nbsp;·&nbsp; Automated News Dispatch
+        </p>
+
+      </td>
+    </tr>
+  </table>
+
+</body>
+</html>

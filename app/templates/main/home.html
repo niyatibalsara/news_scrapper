@@ -1,0 +1,546 @@
+{% extends 'base.html' %}
+{% block title %}Home | Seamless News Scraper{% endblock %}
+
+{% block content %}
+
+<style>
+  :root {
+    --bg: #f5f7fb;
+    --panel: #ffffff;
+    --panel-soft: #f8fafc;
+    --stroke: #e2e8f0;
+    --text: #0f172a;
+    --muted: #64748b;
+    --primary: #1e3a8a;
+    --primary-soft: #e8eefc;
+    --accent: #2563eb;
+    --shadow: 0 14px 32px rgba(15, 23, 42, 0.06);
+    --radius-lg: 24px;
+    --radius-md: 18px;
+    --navy-dark: #111c4e;
+  }
+
+  .dashboard-shell {
+    padding: 24px 0 0;
+    background:
+      radial-gradient(circle at top left, rgba(37, 99, 235, 0.05), transparent 20%),
+      linear-gradient(180deg, #f8fafc 0%, #f3f6fb 100%);
+  }
+
+  .dashboard-stack {
+    display: grid;
+    gap: 24px;
+  }
+
+  .top-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.7fr) minmax(320px, 0.8fr);
+    gap: 24px;
+  }
+
+  .summary-panel,
+  .profile-panel,
+  .about-panel,
+  .contact-panel {
+    background: var(--panel);
+    border: 1px solid var(--stroke);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow);
+  }
+
+  .summary-panel {
+    padding: 30px;
+    background: linear-gradient(135deg, #ffffff 0%, #f8fbff 100%);
+    border-top: 4px solid var(--primary);
+  }
+
+  .section-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    border-radius: 999px;
+    background: var(--primary-soft);
+    color: var(--primary);
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.7px;
+    margin-bottom: 18px;
+  }
+
+  .section-tag::before {
+    content: "";
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    background: var(--accent);
+  }
+
+  .summary-panel h1 {
+    margin: 0 0 12px;
+    font-size: 40px;
+    line-height: 1.08;
+    letter-spacing: -1px;
+    color: var(--text);
+    font-weight: 800;
+  }
+
+  .summary-panel h1 span {
+    color: var(--primary);
+  }
+
+  .summary-panel p {
+    margin: 0;
+    max-width: 760px;
+    font-size: 16px;
+    line-height: 1.85;
+    color: var(--muted);
+  }
+
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
+    margin-top: 24px;
+  }
+
+  .summary-card {
+    background: var(--panel-soft);
+    border: 1px solid var(--stroke);
+    border-radius: var(--radius-md);
+    padding: 18px;
+  }
+
+  .summary-card small {
+    display: block;
+    margin-bottom: 8px;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+  }
+
+  .summary-card strong {
+    display: block;
+    font-size: 22px;
+    line-height: 1.2;
+    color: var(--text);
+    font-weight: 800;
+  }
+
+  .summary-card span {
+    display: block;
+    margin-top: 6px;
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.6;
+  }
+
+  .profile-panel {
+    padding: 24px;
+    display: grid;
+    align-content: start;
+    gap: 18px;
+  }
+
+  .profile-head {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .profile-avatar {
+    width: 58px;
+    height: 58px;
+    border-radius: 18px;
+    background: #dbe7ff;
+    color: var(--primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 26px;
+    font-weight: 800;
+    border: 1px solid #c7d7fe;
+  }
+
+  .profile-head span {
+    display: block;
+    margin-bottom: 4px;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.7px;
+  }
+
+  .profile-head strong {
+    display: block;
+    color: var(--text);
+    font-size: 17px;
+    font-weight: 800;
+  }
+
+  .profile-item {
+    background: var(--panel-soft);
+    border: 1px solid var(--stroke);
+    border-radius: 16px;
+    padding: 15px 16px;
+  }
+
+  .profile-item small {
+    display: block;
+    margin-bottom: 6px;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+  }
+
+  .profile-item div {
+    color: var(--text);
+    font-size: 15px;
+    font-weight: 700;
+    word-break: break-word;
+  }
+
+  .middle-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.85fr);
+    gap: 24px;
+  }
+
+  .about-panel {
+    padding: 30px;
+  }
+
+  .about-header {
+    margin-bottom: 24px;
+  }
+
+  .about-header h2 {
+    margin: 0 0 12px;
+    font-size: 34px;
+    line-height: 1.15;
+    letter-spacing: -0.8px;
+    color: var(--text);
+    font-weight: 800;
+  }
+
+  .about-header p {
+    margin: 0;
+    max-width: 760px;
+    color: var(--muted);
+    font-size: 16px;
+    line-height: 1.85;
+  }
+
+  .about-feature-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px;
+  }
+
+  .feature-card {
+    background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+    border: 1px solid var(--stroke);
+    border-radius: 20px;
+    padding: 22px;
+    min-height: 220px;
+  }
+
+  .feature-icon {
+    width: 50px;
+    height: 50px;
+    border-radius: 16px;
+    background: var(--primary-soft);
+    color: var(--primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    margin-bottom: 16px;
+  }
+
+  .feature-card h3 {
+    margin: 0 0 10px;
+    color: var(--text);
+    font-size: 20px;
+    font-weight: 800;
+  }
+
+  .feature-card p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 14px;
+    line-height: 1.85;
+  }
+
+  .contact-panel {
+    padding: 28px;
+    display: grid;
+    gap: 18px;
+    align-content: start;
+  }
+
+  .contact-panel h3 {
+    margin: 0;
+    color: var(--text);
+    font-size: 28px;
+    font-weight: 800;
+    line-height: 1.2;
+  }
+
+  .contact-intro {
+    margin: -6px 0 4px;
+    color: var(--muted);
+    font-size: 14px;
+    line-height: 1.8;
+  }
+
+  .contact-card {
+    background: var(--panel-soft);
+    border: 1px solid var(--stroke);
+    border-radius: 18px;
+    padding: 18px;
+  }
+
+  .contact-card small {
+    display: block;
+    margin-bottom: 8px;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+  }
+
+  .contact-card div {
+    color: var(--text);
+    font-size: 15px;
+    font-weight: 700;
+    line-height: 1.8;
+  }
+
+  /* Footer copied to match landing.html */
+  .lp-footer {
+    background: var(--navy-dark);
+    padding: 36px 80px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 12px;
+  }
+
+  .lp-footer-copy {
+    font-size: 13px;
+    color: rgba(255,255,255,.35);
+    margin: 0;
+  }
+
+  .lp-footer-links {
+    display: flex;
+    gap: 20px;
+  }
+
+  .lp-footer-links a {
+    font-size: 13px;
+    color: rgba(255,255,255,.40);
+    text-decoration: none;
+    transition: color .15s;
+  }
+
+  .lp-footer-links a:hover {
+    color: rgba(255,255,255,.80);
+  }
+
+  @media (max-width: 1080px) {
+    .top-grid,
+    .middle-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .summary-panel,
+    .profile-panel,
+    .about-panel,
+    .contact-panel {
+      border-radius: 20px;
+    }
+
+    .summary-panel,
+    .about-panel,
+    .contact-panel {
+      padding: 22px;
+    }
+
+    .summary-panel h1 {
+      font-size: 30px;
+    }
+
+    .summary-grid,
+    .about-feature-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .about-header h2 {
+      font-size: 28px;
+    }
+
+    .lp-footer {
+      flex-direction: column;
+      gap: 16px;
+      text-align: center;
+      padding: 28px 24px;
+    }
+  }
+</style>
+
+<div class="dashboard-shell">
+  <div class="dashboard-stack">
+
+    <!-- Top -->
+    <section class="top-grid">
+      <div class="summary-panel">
+        <div class="section-tag">Dashboard Overview</div>
+        <h1>Welcome back, <span>{{ session.get('user_name', 'User') }}</span></h1>
+        <p>
+          This workspace gives you a clean and organized view of the Seamless News
+          Scraper environment. The layout is designed to feel structured and professional,
+          with clearer hierarchy, calmer spacing, and a more refined presentation.
+        </p>
+
+        <div class="summary-grid">
+          <div class="summary-card">
+            <small>Platform</small>
+            <strong>Seamless News Scraper</strong>
+            <span>Centralized dashboard for news workflow visibility and control.</span>
+          </div>
+
+          <div class="summary-card">
+            <small>Company</small>
+            <strong>Seamless Automations</strong>
+            <span>Technology-focused solutions for automation and operational efficiency.</span>
+          </div>
+
+          <div class="summary-card">
+            <small>Status</small>
+            <strong>Operational</strong>
+            <span>System access is available and your session is active.</span>
+          </div>
+        </div>
+      </div>
+
+      <aside class="profile-panel">
+        <div class="profile-head">
+          <div class="profile-avatar">
+            {{ (session.get('user_name', 'U')[0] if session.get('user_name') else 'U')|upper }}
+          </div>
+          <div>
+            <span>Signed in user</span>
+            <strong>{{ session.get('user_name', 'User') }}</strong>
+          </div>
+        </div>
+
+        <div class="profile-item">
+          <small>Email</small>
+          <div>{{ session.get('user_email', 'No email available') }}</div>
+        </div>
+
+        <div class="profile-item">
+          <small>Role</small>
+          <div>Dashboard User</div>
+        </div>
+
+        <div class="profile-item">
+          <small>Status</small>
+          <div>Active Session</div>
+        </div>
+      </aside>
+    </section>
+
+    <!-- About + Contact -->
+    <section class="middle-grid">
+      <div class="about-panel">
+        <div class="section-tag">About Seamless Automations</div>
+
+        <div class="about-header">
+          <h2>A more professional view of the platform and the organization behind it.</h2>
+          <p>
+            Seamless Automations focuses on digital automation and technology-driven
+            solutions that help businesses improve efficiency, streamline operations,
+            and build practical software systems. This dashboard reflects that direction
+            through a layout that is simpler, more restrained, and easier to scan.
+          </p>
+        </div>
+
+        <div class="about-feature-grid">
+          <div class="feature-card">
+            <div class="feature-icon">⚙️</div>
+            <h3>What we do</h3>
+            <p>
+              We deliver automation, software development, and process optimization
+              solutions that simplify complex tasks and support modern business operations
+              through well-structured technology.
+            </p>
+          </div>
+
+          <div class="feature-card">
+            <div class="feature-icon">📰</div>
+            <h3>How this dashboard helps</h3>
+            <p>
+              The dashboard provides a centralized interface for organized news workflow
+              activity, helping users access key information quickly in a cleaner and
+              more refined environment.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <aside class="contact-panel">
+        <h3>Contact Information</h3>
+        <p class="contact-intro">
+          Official contact details for Seamless Automations.
+        </p>
+
+        <div class="contact-card">
+          <small>Address</small>
+          <div>
+            B-1081, Oberoi Garden Estate,<br>
+            Chandivali, Saki Naka,<br>
+            Mumbai - 400072
+          </div>
+        </div>
+
+        <div class="contact-card">
+          <small>Contact Number</small>
+          <div>
+            +91 8850298276<br>
+            +91 2266661567
+          </div>
+        </div>
+
+        <div class="contact-card">
+          <small>Email</small>
+          <div>sales@seamlessautomations.com</div>
+        </div>
+      </aside>
+    </section>
+
+    <!-- Footer same as landing.html -->
+    <footer class="lp-footer">
+      <p class="lp-footer-copy">© 2026 Seamless Infinite Innovations. All rights reserved.</p>
+      <div class="lp-footer-links">
+        <a href="#">Privacy</a>
+        <a href="#">Terms</a>
+        <a href="#">Contact</a>
+      </div>
+    </footer>
+
+  </div>
+</div>
+
+{% endblock %}

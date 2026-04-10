@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Seamless News Scraper{% endblock %}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    {% block extra_css %}{% endblock %}
+</head>
+<body class="{% if request.endpoint in ['auth.login', 'auth.signup'] %}auth-body{% endif %}">
+
+    {% if request.endpoint not in ['auth.login', 'auth.signup', 'main.index'] and session.get('user_id') %}
+        {% include 'partials/navbar.html' %}
+    {% endif %}
+
+    <main class="{% if request.endpoint in ['auth.login', 'auth.signup'] %}auth-main{% else %}page-shell{% endif %}">
+
+        {% if request.endpoint not in ['auth.login', 'auth.signup'] %}
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                   
+                {% endif %}
+            {% endwith %}
+        {% endif %}
+
+        {% block content %}{% endblock %}
+    </main>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

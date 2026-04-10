@@ -1,0 +1,232 @@
+{% extends 'base.html' %}
+{% block title %}View News Type — Seamless{% endblock %}
+
+{% block content %}
+<div class="page-container">
+
+  <div class="page-head">
+    <div class="breadcrumb-row">
+      <a href="{{ url_for('main.home') }}">Dashboard</a>
+      <span class="sep">›</span>
+      <span>View Master</span>
+      <span class="sep">›</span>
+      <span>View News Type</span>
+    </div>
+    <h1>View News Type</h1>
+    <p>All registered news types for news scraping.</p>
+  </div>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for category, message in messages %}
+        <div class="alert alert-{{ category }}" style="margin-bottom:12px; padding:10px 16px; border-radius:8px;
+          background: {% if category == 'success' %}#d1fae5{% elif category == 'danger' %}#fee2e2{% else %}#fef9c3{% endif %};
+          color: {% if category == 'success' %}#065f46{% elif category == 'danger' %}#991b1b{% else %}#854d0e{% endif %};">
+          {{ message }}
+        </div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  <form method="POST" action="{{ url_for('main.view_news_type') }}" id="main-form">
+    <input type="hidden" name="action" id="form-action" value="">
+
+    <div class="table-card">
+      <div class="table-card-header">
+        <div>
+          <div class="table-card-title">News Types for scraping</div>
+          <div class="table-card-subtitle">News types configured for news scraping</div>
+        </div>
+
+        <div class="table-controls">
+          <div class="tbl-search">
+            <span class="tbl-search-icon">🔍</span>
+            <input class="tbl-search-input" type="text" id="searchInput" placeholder="Search News Types…" oninput="filterTable()" />
+          </div>
+
+          <button type="button" class="btn btn-primary" onclick="showAddRow()">+ Add News Type</button>
+          <button type="button" class="btn btn-primary" onclick="submitEdit()">+ Edit</button>
+          <button type="button" class="btn btn-primary" onclick="submitBulkDelete()">+ Delete</button>
+        </div>
+      </div>
+
+      <div class="tbl-wrap">
+        <table class="seamless-table" id="newstype-table">
+          <thead>
+            <tr>
+              <th style="width:40px;">
+                <input type="checkbox" id="select-all" onclick="toggleSelectAll(this)">
+              </th>
+              <th class="col-srno">Sr. No</th>
+              <th>News Type</th>
+            </tr>
+          </thead>
+
+          <tbody id="newstype-tbody">
+
+            <!-- ADD ROW (hidden by default) -->
+            <tr id="add-row" style="display: none;">
+              <td colspan="3">
+                <div style="display: grid; grid-template-columns: 120px 1fr auto auto; gap: 12px; align-items: center;">
+                  <input
+                    type="number"
+                    name="sr_no"
+                    id="add-sr-no"
+                    placeholder="Sr. No"
+                    min="1"
+                    style="width: 100%; padding: 10px 12px; border: 1px solid #dce4f5; border-radius: 8px;"
+                  >
+                  <input
+                    type="text"
+                    name="news_type"
+                    id="add-news-type"
+                    placeholder="Enter news type"
+                    style="width: 100%; padding: 10px 12px; border: 1px solid #dce4f5; border-radius: 8px;"
+                  >
+                  <button type="button" class="btn btn-primary" onclick="submitAdd()">Add</button>
+                  <button type="button" class="btn btn-ghost" onclick="hideAddRow()">Cancel</button>
+                </div>
+              </td>
+            </tr>
+
+            {% if news_types %}
+              {% for item in news_types %}
+              <tr id="row-{{ item.id }}" data-id="{{ item.id }}">
+                <td>
+                  <input type="checkbox" name="selected_news_types" value="{{ item.id }}" class="row-checkbox">
+                </td>
+                <td class="col-srno">{{ item.sr_no }}</td>
+
+                <!-- VIEW mode -->
+                <td class="newstype-view-{{ item.id }}">{{ item.news_type }}</td>
+
+                <!-- EDIT mode (hidden) -->
+                <td class="newstype-edit-{{ item.id }}" style="display:none;">
+                  <div style="display: flex; gap: 10px; align-items: center;">
+                    <input
+                      type="text"
+                      id="edit-nt-{{ item.id }}"
+                      value="{{ item.news_type }}"
+                      style="width:100%; padding:8px 12px; border:1px solid #dce4f5; border-radius:8px;"
+                    >
+                    <button type="button" class="btn btn-primary" style="padding:6px 14px; font-size:13px; white-space:nowrap;"
+                      onclick="saveEditRow({{ item.id }})">Save</button>
+                    <button type="button" class="btn btn-ghost" style="padding:6px 14px; font-size:13px; white-space:nowrap;"
+                      onclick="cancelEditRow({{ item.id }})">Cancel</button>
+                  </div>
+                </td>
+
+              </tr>
+              {% endfor %}
+            {% else %}
+              <tr id="empty-row">
+                <td colspan="3">
+                  <div class="tbl-empty">
+                    <div class="tbl-empty-icon">📰</div>
+                    <div class="tbl-empty-text">News types are not yet registered.</div>
+                  </div>
+                </td>
+              </tr>
+            {% endif %}
+
+          </tbody>
+        </table>
+      </div>
+
+      <div class="table-card-footer">
+        <span>Showing <strong id="entry-count">{{ news_types|length }}</strong> entries</span>
+        <div class="pagination">
+          <button class="pg-btn" type="button">‹</button>
+          <button class="pg-btn active" data-page="1" type="button">1</button>
+          <button class="pg-btn" type="button">›</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Hidden fields for edit submission -->
+    <input type="hidden" name="news_type_id" id="edit-newstype-id" value="">
+    <input type="hidden" name="edit_news_type" id="edit-newstype-value" value="">
+
+  </form>
+
+</div>
+
+<script>
+  function showAddRow() {
+    document.getElementById('add-row').style.display = 'table-row';
+    document.getElementById('add-sr-no').focus();
+  }
+
+  function hideAddRow() {
+    document.getElementById('add-row').style.display = 'none';
+    document.getElementById('add-sr-no').value = '';
+    document.getElementById('add-news-type').value = '';
+  }
+
+  function submitAdd() {
+    const srNo = document.getElementById('add-sr-no').value.trim();
+    const val  = document.getElementById('add-news-type').value.trim();
+    if (!srNo || !val) { alert('Both Sr. No and News Type are required.'); return; }
+    document.getElementById('form-action').value = 'add';
+    document.getElementById('main-form').submit();
+  }
+
+  function submitEdit() {
+    const checked = document.querySelectorAll('.row-checkbox:checked');
+    if (checked.length === 0) { alert('Please select a row to edit.'); return; }
+    if (checked.length > 1)  { alert('Please select only one row to edit at a time.'); return; }
+    const id = checked[0].value;
+    document.querySelectorAll('tr[id^="row-"]').forEach(row => {
+      if (row.dataset.id !== id) cancelEditRow(row.dataset.id);
+    });
+    enableEditRow(id);
+  }
+
+  function enableEditRow(id) {
+    document.querySelector('.newstype-view-' + id).style.display = 'none';
+    document.querySelector('.newstype-edit-' + id).style.display = '';
+    const input = document.getElementById('edit-nt-' + id);
+    if (input) { input.focus(); input.select(); }
+  }
+
+  function cancelEditRow(id) {
+    const viewCell = document.querySelector('.newstype-view-' + id);
+    const editCell = document.querySelector('.newstype-edit-' + id);
+    if (viewCell) viewCell.style.display = '';
+    if (editCell) editCell.style.display = 'none';
+  }
+
+  function saveEditRow(id) {
+    const newVal = document.getElementById('edit-nt-' + id).value.trim();
+    if (!newVal) { alert('News Type cannot be empty.'); return; }
+    document.getElementById('form-action').value          = 'edit';
+    document.getElementById('edit-newstype-id').value    = id;
+    document.getElementById('edit-newstype-value').value = newVal;
+    document.getElementById('main-form').submit();
+  }
+
+  function toggleSelectAll(master) {
+    document.querySelectorAll('.row-checkbox').forEach(cb => cb.checked = master.checked);
+  }
+
+  function submitBulkDelete() {
+    const checked = document.querySelectorAll('.row-checkbox:checked');
+    if (checked.length === 0) { alert('Please select at least one row to delete.'); return; }
+    if (!confirm(`Delete ${checked.length} selected news type(s)?`)) return;
+    document.getElementById('form-action').value = 'bulk_delete';
+    document.getElementById('main-form').submit();
+  }
+
+  function filterTable() {
+    const q = document.getElementById('searchInput').value.toLowerCase();
+    let visible = 0;
+    document.querySelectorAll('#newstype-tbody tr[id^="row-"]').forEach(row => {
+      const val = row.querySelector('td:nth-child(3)')?.textContent.toLowerCase() || '';
+      const show = val.includes(q);
+      row.style.display = show ? '' : 'none';
+      if (show) visible++;
+    });
+    document.getElementById('entry-count').textContent = visible;
+  }
+</script>
+{% endblock %}

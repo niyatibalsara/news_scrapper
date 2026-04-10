@@ -1,0 +1,123 @@
+{% extends 'base.html' %}
+{% block title %}View Keywords — Seamless{% endblock %}
+
+{% block content %}
+<div class="page-container">
+
+  <div class="page-head">
+    <div class="breadcrumb-row">
+      <a href="{{ url_for('main.home') }}">Dashboard</a>
+      <span class="sep">›</span>
+      <span>View Master</span>
+      <span class="sep">›</span>
+      <span>View Keywords</span>
+    </div>
+    <h1>View Keywords</h1>
+    <p>All registered keywords for news scraping.</p>
+  </div>
+
+  <div class="table-card">
+    <div class="table-card-header">
+      <div>
+        <div class="table-card-title">Keywords for scraping</div>
+        <div class="table-card-subtitle">Words configured for news scraping</div>
+      </div>
+
+      <div class="table-controls">
+        <div class="tbl-search">
+          <span class="tbl-search-icon">🔍</span>
+          <input class="tbl-search-input" type="text" placeholder="Search Keywords…" />
+        </div>
+        
+        <button type="button" class="btn btn-primary" onclick="toggleRow(true)">
+          + Add Keywords
+        </button>
+         <button type="button" class="btn btn-primary" onclick="toggleRow(true)">
+          + Edit
+        </button>
+         <button type="button" class="btn btn-primary" onclick="toggleRow(true)">
+          + Delete
+        </button>
+      </div>
+    </div>
+
+    <div class="tbl-wrap">
+      <table class="seamless-table">
+        <thead>
+          <tr>
+            <th class="col-srno">Sr. No</th>
+            <th>Keywords</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          <tr id="add-row" style="display: none;">
+            <td colspan="3">
+              <form method="POST" action="{{ url_for('main.view_keywords') }}" style="margin: 0;">
+                <div style="display: grid; grid-template-columns: 120px 1fr auto auto; gap: 12px; align-items: center;">
+                  <input
+                    type="number"
+                    name="sr_no"
+                    placeholder="Sr. No"
+                    required
+                    min="1"
+                    style="width: 100%; padding: 10px 12px; border: 1px solid #dce4f5; border-radius: 8px;"
+                  >
+
+                  <input
+                    type="text"
+                    name="keyword"
+                    placeholder="Enter keyword"
+                    required
+                    style="width: 100%; padding: 10px 12px; border: 1px solid #dce4f5; border-radius: 8px;"
+                  >
+
+                  <button type="submit" class="btn btn-primary">Add</button>
+                  <button type="button" class="btn btn-ghost" onclick="toggleRow(false)">Cancel</button>
+                </div>
+              </form>
+            </td>
+          </tr>
+
+          {% if keywords %}
+            {% for item in keywords %}
+            <tr>
+              <td class="col-srno">{{ item.sr_no }}</td>
+              <td>{{ item.keyword }}</td>
+              <td>-</td>
+            </tr>
+            {% endfor %}
+          {% else %}
+          <tr>
+            <td colspan="3">
+              <div class="tbl-empty">
+                <div class="tbl-empty-icon">🌐</div>
+                <div class="tbl-empty-text">Keywords are not yet registered.</div>
+              </div>
+            </td>
+          </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="table-card-footer">
+      <span>Showing <strong>{{ keywords|length }}</strong> entries</span>
+      <div class="pagination">
+        <button class="pg-btn">‹</button>
+        <button class="pg-btn active" data-page="1">1</button>
+        <button class="pg-btn">›</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  function toggleRow(show) {
+    const row = document.getElementById('add-row');
+    row.style.display = show ? 'table-row' : 'none';
+  }
+</script>
+{% endblock %}

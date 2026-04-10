@@ -1,0 +1,47 @@
+{% extends 'base.html' %}
+{% block title %}{{ page_title }} | Seamless News Scraper{% endblock %}
+
+{% block content %}
+<section class="dashboard-hero dashboard-hero-modern compact-hero">
+    <div class="hero-copy-block">
+        <span class="eyebrow">{{ section_label }}</span>
+        <h1>{{ page_title }}</h1>
+        <p>{{ page_description }}</p>
+    </div>
+</section>
+
+<section class="dashboard-section">
+    <div class="section-heading">
+        <span class="panel-tag">Data Table</span>
+        <h2>{{ page_title }} Table</h2>
+        <p>
+            This responsive table layout is ready for future database-driven content.
+        </p>
+    </div>
+
+    <div class="modern-table-wrap">
+        <table class="modern-table">
+            <thead>
+                <tr>
+                    <th>Sr. No</th>
+                    <th>Website URL</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>1</td>
+                    <td>https://example-source-1.com</td>
+                </tr>
+                <tr>
+                    <td>2</td>
+                    <td>https://example-source-2.com</td>
+                </tr>
+                <tr>
+                    <td>3</td>
+                    <td>https://example-source-3.com</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

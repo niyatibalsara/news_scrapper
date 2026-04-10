@@ -1,0 +1,652 @@
+{% extends "base.html" %}
+{% block title %}Home{% endblock %}
+
+{% block extra_css %}
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,300&family=Playfair+Display:ital,wght@0,400;0,500;1,400;1,500&display=swap');
+
+/* ── Reset scoped to .lp ── */
+.lp *, .lp *::before, .lp *::after { box-sizing: border-box; margin: 0; padding: 0; }
+.lp {
+  --navy:       #1B2A6B;
+  --navy-dark:  #111c4e;
+  --navy-light: #2d3f8a;
+  --accent:     #4A6CF7;
+  --accent-soft:#e8ecff;
+  --white:      #ffffff;
+  --off-white:  #f7f8fc;
+  --gray-100:   #e2e6f0;
+  --gray-500:   #6b7a9e;
+  --gray-700:   #3d4a6b;
+  --shadow-sm:  0 1px 4px rgba(27,42,107,.08);
+  --shadow-md:  0 4px 24px rgba(27,42,107,.12);
+  --shadow-lg:  0 12px 48px rgba(27,42,107,.16);
+  --ease:       cubic-bezier(.23,1,.32,1);
+  font-family: 'DM Sans', sans-serif;
+  color: #1a2244;
+  background: var(--white);
+}
+
+/* ══════════════════════════════════
+   NAVBAR — always white, always solid
+══════════════════════════════════ */
+.lp-nav {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 68px;
+  z-index: 500;
+  background: var(--white);
+  border-bottom: 1px solid var(--gray-100);
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 48px;
+}
+
+/* .lp-nav-logo {
+  height: 36px;
+  width: auto;
+  display: block;
+  object-fit: contain;
+} */
+.lp-nav-logo {
+    height: 50px;
+    width: auto;
+    display: block;
+    object-fit: contain;
+}
+.lp-nav-links {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.lp-nav-ghost {
+  padding: 8px 18px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--navy);
+  text-decoration: none;
+  transition: background .15s, color .15s;
+}
+.lp-nav-ghost:hover { background: var(--accent-soft); color: var(--accent); }
+
+.lp-nav-solid {
+  padding: 9px 22px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--white);
+  background: var(--navy);
+  text-decoration: none;
+  transition: background .15s, box-shadow .15s, transform .15s;
+}
+.lp-nav-solid:hover {
+  background: var(--navy-light);
+  box-shadow: 0 4px 16px rgba(27,42,107,.28);
+  transform: translateY(-1px);
+}
+
+/* ══════════════════════════════════
+   HERO — full width navy panel
+══════════════════════════════════ */
+.lp-hero {
+  position: relative;
+  min-height: 100vh;
+  background: var(--navy);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 120px 60px 80px;
+  overflow: hidden;
+  text-align: center;
+}
+
+/* Background radial layers */
+.lp-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at 20% 30%, rgba(74,108,247,.35) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 70%, rgba(17,28,78,.60) 0%, transparent 50%),
+    radial-gradient(ellipse at 50% 50%, rgba(27,42,107,.20) 0%, transparent 70%);
+}
+
+/* Decorative ring circles */
+.lp-hero-rings {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.lp-hero-rings span {
+  position: absolute;
+  border-radius: 50%;
+  border: 1px solid rgba(255,255,255,.06);
+}
+.lp-hero-rings span:nth-child(1) { width: 700px; height: 700px; top: -200px; left: -150px; }
+.lp-hero-rings span:nth-child(2) { width: 500px; height: 500px; bottom: -180px; right: -120px; }
+.lp-hero-rings span:nth-child(3) { width: 300px; height: 300px; top: 50%; right: 8%; transform: translateY(-50%); }
+.lp-hero-rings span:nth-child(4) { width: 200px; height: 200px; top: 15%; left: 10%; background: rgba(74,108,247,.06); border: none; }
+
+/* Inner content */
+.lp-hero-inner {
+  position: relative;
+  z-index: 2;
+  max-width: 760px;
+  width: 100%;
+}
+
+/* Logo inside hero — large and centred */
+.lp-hero-logo-wrap {
+  margin-bottom: 40px;
+  animation: lp-up .6s var(--ease) .05s both;
+}
+
+.lp-hero-logo {
+  height: 56px;
+  width: auto;
+  display: inline-block;
+  filter: brightness(0) invert(1);
+  opacity: .92;
+}
+
+/* Eyebrow badge */
+.lp-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 18px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.12);
+  border: 1px solid rgba(255,255,255,.22);
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(255,255,255,.88);
+  letter-spacing: .9px;
+  text-transform: uppercase;
+  margin-bottom: 28px;
+  animation: lp-up .6s var(--ease) .15s both;
+}
+.lp-eyebrow-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: #60a5fa;
+  flex-shrink: 0;
+}
+
+/* Heading */
+.lp-heading {
+  font-family: 'Playfair Display', serif;
+  font-size: clamp(36px, 5.5vw, 64px);
+  font-weight: 500;
+  color: var(--white);
+  line-height: 1.12;
+  margin-bottom: 24px;
+  animation: lp-up .6s var(--ease) .25s both;
+}
+.lp-heading em { font-style: italic; color: #a5b4fc; }
+
+/* Tagline */
+.lp-tagline {
+  font-size: 17px;
+  color: rgba(255,255,255,.65);
+  line-height: 1.75;
+  max-width: 600px;
+  margin: 0 auto 48px;
+  animation: lp-up .6s var(--ease) .35s both;
+}
+.lp-tagline strong { color: rgba(255,255,255,.92); font-weight: 600; }
+
+/* CTA buttons */
+.lp-ctas {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 64px;
+  animation: lp-up .6s var(--ease) .45s both;
+}
+
+.lp-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 15px 36px;
+  background: var(--white);
+  color: var(--navy);
+  border-radius: 12px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  text-decoration: none;
+  border: none;
+  cursor: pointer;
+  transition: transform .15s, box-shadow .15s, background .15s;
+  box-shadow: 0 4px 20px rgba(0,0,0,.20);
+}
+.lp-btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(0,0,0,.26); background: #f0f2ff; }
+.lp-btn-primary .arr { transition: transform .15s var(--ease); }
+.lp-btn-primary:hover .arr { transform: translateX(4px); }
+
+.lp-btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 32px;
+  background: transparent;
+  color: rgba(255,255,255,.88);
+  border: 1.5px solid rgba(255,255,255,.30);
+  border-radius: 12px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 15px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: border-color .15s, background .15s, color .15s;
+}
+.lp-btn-ghost:hover { border-color: rgba(255,255,255,.65); background: rgba(255,255,255,.08); color: var(--white); }
+
+/* Stats row */
+.lp-stats {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  padding-top: 40px;
+  border-top: 1px solid rgba(255,255,255,.10);
+  animation: lp-up .6s var(--ease) .55s both;
+}
+
+.lp-stat {
+  flex: 1;
+  max-width: 200px;
+  text-align: center;
+  padding: 0 28px;
+  position: relative;
+}
+.lp-stat + .lp-stat::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 10%; bottom: 10%;
+  width: 1px;
+  background: rgba(255,255,255,.12);
+}
+.lp-stat-val { font-size: 32px; font-weight: 800; color: var(--white); line-height: 1; }
+.lp-stat-label { font-size: 12.5px; color: rgba(255,255,255,.50); margin-top: 6px; font-weight: 400; }
+
+/* ══════════════════════════════════
+   FEATURES SECTION
+══════════════════════════════════ */
+.lp-features {
+  background: var(--off-white);
+  padding: 80px 80px 88px;
+}
+
+.lp-features-hdr { text-align: center; margin-bottom: 56px; }
+
+.lp-eyebrow2 {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 18px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--navy);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .7px;
+  text-transform: uppercase;
+  margin-bottom: 16px;
+}
+
+.lp-sec-h {
+  font-size: clamp(24px, 3vw, 36px);
+  font-weight: 700;
+  color: var(--navy);
+  letter-spacing: -.4px;
+  margin-bottom: 14px;
+}
+
+.lp-sec-sub {
+  font-size: 16px;
+  color: var(--gray-500);
+  max-width: 520px;
+  margin: 0 auto;
+  line-height: 1.7;
+}
+
+.lp-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+}
+
+.lp-card {
+  background: var(--white);
+  border: 1px solid var(--gray-100);
+  border-radius: 20px;
+  padding: 32px 28px;
+  transition: box-shadow .28s, border-color .28s, transform .28s;
+  position: relative;
+  overflow: hidden;
+  opacity: 0;
+}
+.lp-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--navy), var(--accent));
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform .28s var(--ease);
+}
+.lp-card:hover { box-shadow: var(--shadow-md); border-color: rgba(74,108,247,.35); transform: translateY(-4px); }
+.lp-card:hover::before { transform: scaleX(1); }
+.lp-card.visible { animation: lp-up .6s var(--ease) both; }
+
+.lp-card-icon {
+  width: 52px; height: 52px;
+  border-radius: 14px;
+  background: var(--navy);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  margin-bottom: 20px;
+}
+.lp-card-title { font-size: 17px; font-weight: 700; color: var(--navy); margin-bottom: 10px; }
+.lp-card-desc { font-size: 14px; color: var(--gray-500); line-height: 1.7; }
+
+/* ══════════════════════════════════
+   CTA BANNER
+══════════════════════════════════ */
+.lp-cta-banner {
+  background: var(--navy);
+  padding: 88px 80px;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+.lp-cta-banner::before {
+  content: '';
+  position: absolute; inset: 0; pointer-events: none;
+  background:
+    radial-gradient(ellipse at 25% 50%, rgba(74,108,247,.30), transparent 55%),
+    radial-gradient(ellipse at 75% 50%, rgba(17,28,78,.50), transparent 55%);
+}
+.lp-cta-rings { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.lp-cta-rings span { position: absolute; border-radius: 50%; border: 1px solid rgba(255,255,255,.06); }
+.lp-cta-rings span:nth-child(1) { width: 500px; height: 500px; top: -180px; left: -100px; }
+.lp-cta-rings span:nth-child(2) { width: 400px; height: 400px; bottom: -130px; right: -80px; }
+.lp-cta-inner { position: relative; z-index: 1; max-width: 760px; margin: 0 auto; }
+.lp-cta-quote {
+  font-family: 'Playfair Display', serif;
+  font-size: clamp(20px, 2.6vw, 28px);
+  font-weight: 400;
+  font-style: italic;
+  color: rgba(255,255,255,.88);
+  line-height: 1.6;
+  margin-bottom: 36px;
+}
+.lp-cta-quote strong { font-style: normal; color: var(--white); font-weight: 600; }
+.lp-cta-btns { display: flex; justify-content: center; gap: 14px; flex-wrap: wrap; }
+
+/* ══════════════════════════════════
+   FOOTER
+══════════════════════════════════ */
+.lp-footer {
+  background: var(--navy-dark);
+  padding: 36px 80px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.lp-footer-logo { height: 30px; width: auto; filter: brightness(0) invert(1); opacity: .65; }
+.lp-footer-copy { font-size: 13px; color: rgba(255,255,255,.35); }
+.lp-footer-links { display: flex; gap: 20px; }
+.lp-footer-links a { font-size: 13px; color: rgba(255,255,255,.40); text-decoration: none; transition: color .15s; }
+.lp-footer-links a:hover { color: rgba(255,255,255,.80); }
+
+/* ══════════════════════════════════
+   ANIMATION
+══════════════════════════════════ */
+@keyframes lp-up {
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ══════════════════════════════════
+   RESPONSIVE
+══════════════════════════════════ */
+@media (max-width: 1024px) {
+  .lp-grid { grid-template-columns: 1fr 1fr; }
+  .lp-features, .lp-cta-banner, .lp-footer { padding-left: 40px; padding-right: 40px; }
+}
+@media (max-width: 768px) {
+  .lp-nav { padding: 0 20px; }
+  .lp-nav-ghost { display: none; }
+  .lp-hero { padding: 100px 28px 64px; }
+  .lp-heading { font-size: clamp(32px, 8vw, 48px); }
+  .lp-tagline { font-size: 15px; }
+  .lp-grid { grid-template-columns: 1fr; }
+  .lp-features { padding: 56px 24px; }
+  .lp-cta-banner { padding: 64px 24px; }
+  .lp-footer { flex-direction: column; gap: 16px; text-align: center; padding: 28px 24px; }
+  .lp-stats { gap: 0; }
+  .lp-stat { padding: 0 16px; }
+}
+@media (max-width: 480px) {
+  .lp-ctas { flex-direction: column; width: 100%; }
+  .lp-btn-primary, .lp-btn-ghost { width: 100%; justify-content: center; }
+  .lp-stats { flex-wrap: wrap; }
+  .lp-stat { min-width: 45%; }
+  .lp-stat + .lp-stat::before { display: none; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="lp">
+
+<!-- ══════════════════════════════════════
+     NAVBAR — solid white, always visible
+══════════════════════════════════════ -->
+<nav class="lp-nav">
+  <img
+    src="{{ url_for('static', filename='images/logo2.png') }}"
+    alt="Seamless Infinite Innovations"
+    class="lp-nav-logo"
+  />
+  <div class="lp-nav-links">
+    <a href="#features" class="lp-nav-ghost">Features</a>
+    <a href="{{ url_for('auth.login') }}" class="lp-nav-ghost">Log In</a>
+    <a href="{{ url_for('auth.signup') }}" class="lp-nav-solid">Sign Up</a>
+  </div>
+</nav>
+
+
+<!-- ══════════════════════════════════════
+     HERO — full-width navy, centred
+══════════════════════════════════════ -->
+<section class="lp-hero">
+
+  <!-- Decorative rings -->
+  <div class="lp-hero-rings">
+    <span></span><span></span><span></span><span></span>
+  </div>
+
+  <div class="lp-hero-inner">
+
+    <!-- Logo centred inside hero -->
+    <div class="lp-hero-logo-wrap">
+     
+    </div>
+
+    <!-- Eyebrow -->
+    <div class="lp-eyebrow">
+      <span class="lp-eyebrow-dot"></span>
+      Seamless Digital Automation
+    </div>
+
+    <!-- Main heading -->
+    <h1 class="lp-heading">
+      Smarter news,<br />
+      <em>infinite intelligence</em><br />
+      at your fingertips.
+    </h1>
+
+    <!-- Brand tagline -->
+    <p class="lp-tagline">
+      Seamless Digital Automation presents
+      <strong>Seamie Scraping Tool</strong>
+      — for easier news scraping and a timeless solution that keeps
+      your organisation ahead of the information curve.
+    </p>
+
+    <!-- CTAs -->
+    <div class="lp-ctas">
+      <a href="{{ url_for('auth.signup') }}" class="lp-btn-primary">
+        Get Started<span class="arr">→</span>
+      </a>
+      <a href="{{ url_for('auth.login') }}" class="lp-btn-ghost">
+        Sign In
+      </a>
+    </div>
+
+    
+
+  </div>
+</section>
+
+
+<!-- ══════════════════════════════════════
+     FEATURES
+══════════════════════════════════════ -->
+<section class="lp-features" id="features">
+  <div class="lp-features-hdr">
+    <div class="lp-eyebrow2">✦ Why Seamie</div>
+    <h2 class="lp-sec-h">Everything you need for smarter news scraping</h2>
+    <p class="lp-sec-sub">
+      A complete workflow that collects data from websites, extracts meaningful information, and presents it in a clear and useful format.
+    </p>
+  </div>
+
+  <div class="lp-grid">
+    <div class="lp-card">
+      <div class="lp-card-icon">🌐</div>
+      <div class="lp-card-title">Data Collection</div>
+      <p class="lp-card-desc">
+        Seamie Scrapping Tool collects news and related information directly from websites, online sources, and digital platforms with speed and consistency.
+      </p>
+    </div>
+
+    <div class="lp-card">
+      <div class="lp-card-icon">🧩</div>
+      <div class="lp-card-title">Data Extraction</div>
+      <p class="lp-card-desc">
+        The system extracts important details from collected content, helping users identify relevant text, structure information, and prepare data for further use.
+      </p>
+    </div>
+
+    <div class="lp-card">
+      <div class="lp-card-icon">📊</div>
+      <div class="lp-card-title">Data Display</div>
+      <p class="lp-card-desc">
+        Extracted information is displayed in a clean and organized way, making it easier to view, understand, and work with the scraped news data efficiently.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════
+     CTA BANNER
+══════════════════════════════════════ -->
+<section class="lp-cta-banner">
+  <div class="lp-cta-rings"><span></span><span></span></div>
+  <div class="lp-cta-inner">
+    <p class="lp-cta-quote">
+      "<strong>Seamless Digital Automation</strong> presents Seamie Scraping Tool —
+      for easier news scraping and a <strong>timeless solution</strong>
+      that keeps your organisation ahead of the information curve."
+    </p>
+    <div class="lp-cta-btns">
+      <a href="{{ url_for('auth.signup') }}" class="lp-btn-primary">
+        Start <span class="arr">→</span>
+      </a>
+      <a href="{{ url_for('auth.login') }}" class="lp-btn-ghost">
+        Already a member? Log In
+      </a>
+    </div>
+  </div>
+</section>
+
+
+<!-- ══════════════════════════════════════
+     FOOTER
+══════════════════════════════════════ -->
+<footer class="lp-footer">
+ 
+  <p class="lp-footer-copy">© 2026 Seamless Infinite Innovations. All rights reserved.</p>
+  <div class="lp-footer-links">
+    <a href="#">Privacy</a>
+    <a href="#">Terms</a>
+    <a href="#">Contact</a>
+  </div>
+</footer>
+
+</div><!-- /lp -->
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+
+  // ── Card reveal on scroll ──
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        setTimeout(() => e.target.classList.add('visible'), parseInt(e.target.dataset.delay) || 0);
+        io.unobserve(e.target);
+      }
+    });
+  }, { threshold: 0.10 });
+  document.querySelectorAll('.lp-card').forEach((el, i) => {
+    el.dataset.delay = i * 80;
+    io.observe(el);
+  });
+
+  // ── Counter animation ──
+  const co = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (!e.isIntersecting) return;
+      const el = e.target;
+      const target = parseInt(el.dataset.target, 10);
+      const suffix = el.dataset.suffix || '';
+      let cur = 0;
+      const step = Math.ceil(target / 50);
+      const t = setInterval(() => {
+        cur = Math.min(cur + step, target);
+        el.textContent = cur.toLocaleString() + suffix;
+        if (cur >= target) clearInterval(t);
+      }, 28);
+      co.unobserve(el);
+    });
+  }, { threshold: 0.5 });
+  document.querySelectorAll('.lp-count').forEach(el => co.observe(el));
+
+  // ── Smooth scroll ──
+  document.querySelectorAll('a[href^="#"]').forEach(a => {
+    a.addEventListener('click', e => {
+      const t = document.querySelector(a.getAttribute('href'));
+      if (t) { e.preventDefault(); t.scrollIntoView({ behavior: 'smooth' }); }
+    });
+  });
+
+});
+</script>
+{% endblock %}

@@ -1,0 +1,86 @@
+<nav class="navbar navbar-menu-style">
+
+  <!-- LEFT: Logo -->
+  <div class="nav-brand">
+    <a href="{{ url_for('main.home') }}">
+      <img src="{{ url_for('static', filename='images/logo2.png') }}" alt="Seamless" class="nav-logo" />
+    </a>
+  </div>
+
+  <!-- CENTER: Nav links with dropdowns -->
+  <div class="nav-center-links" id="navCenterLinks">
+
+    <a href="{{ url_for('main.home') }}"
+       class="nav-main-btn nav-direct-link {{ 'active' if request.endpoint == 'main.home' else '' }}"
+       style="text-decoration:none;">
+      Dashboard
+    </a>
+
+    <!-- View Master dropdown -->
+    <div class="nav-item-dropdown">
+      <button class="nav-main-btn {{ 'active' if request.endpoint in ['main.view_keywords','main.view_websites','main.view_news_type','main.view_commodity'] else '' }}" type="button">
+        View Master
+        <svg class="nav-chevron" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M1 1L5 5L9 1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+      <div class="nav-submenu">
+        <a href="{{ url_for('main.view_keywords') }}"
+           class="nav-submenu-item {{ 'active' if request.endpoint == 'main.view_keywords' else '' }}">
+          View Keywords
+        </a>
+        <a href="{{ url_for('main.view_websites') }}"
+           class="nav-submenu-item {{ 'active' if request.endpoint == 'main.view_websites' else '' }}">
+          View Websites
+        </a>
+        <a href="{{ url_for('main.view_news_type') }}"
+           class="nav-submenu-item {{ 'active' if request.endpoint == 'main.view_news_type' else '' }}">
+          View News Type
+        </a>
+        <a href="{{ url_for('main.view_commodity') }}"
+           class="nav-submenu-item {{ 'active' if request.endpoint == 'main.view_commodity' else '' }}">
+          View Commodity
+        </a>
+      </div>
+    </div>
+
+    <!-- News Processing dropdown -->
+    <div class="nav-item-dropdown">
+      <button class="nav-main-btn {{ 'active' if request.endpoint in ['main.today_published_news','main.all_non_published_news'] else '' }}" type="button">
+        News Processing
+        <svg class="nav-chevron" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M1 1L5 5L9 1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+      <div class="nav-submenu">
+        <a href="{{ url_for('main.today_published_news') }}"
+           class="nav-submenu-item {{ 'active' if request.endpoint == 'main.today_published_news' else '' }}">
+          Today's Published News
+        </a>
+        <a href="{{ url_for('main.all_non_published_news') }}"
+           class="nav-submenu-item {{ 'active' if request.endpoint == 'main.all_non_published_news' else '' }}">
+          All Non-Published News
+        </a>
+      </div>
+    </div>
+
+    <!-- Settings (direct link) -->
+    <a href="{{ url_for('main.user_settings') }}"
+       class="nav-main-btn nav-direct-link {{ 'active' if request.endpoint == 'main.user_settings' else '' }}"
+       style="text-decoration:none;">
+      Settings
+    </a>
+
+  </div>
+
+  <!-- RIGHT: Logout -->
+  <div class="nav-right-links">
+    <a href="{{ url_for('auth.logout') }}" class="logout-link">Logout</a>
+  </div>
+
+  <!-- Mobile hamburger -->
+  <button class="nav-hamburger" id="navHamburger" aria-label="Toggle menu">
+    <span></span><span></span><span></span>
+  </button>
+
+</nav>

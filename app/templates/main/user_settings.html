@@ -1,0 +1,368 @@
+{% extends 'base.html' %}
+{% block title %}User Settings — Seamless{% endblock %}
+
+{% block content %}
+<div class="page-container">
+
+  <div class="page-head">
+    <div class="breadcrumb-row">
+      <a href="{{ url_for('main.home') }}">Dashboard</a>
+      <span class="sep">›</span>
+      <span>Settings</span>
+    </div>
+    <h1>User Settings</h1>
+    <p>Control scheduling, publishing preferences, and content filters.</p>
+  </div>
+
+  <!-- Flash messages -->
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px;">
+        {% for category, message in messages %}
+          {% if category == 'success' %}
+            <div style="display:flex;align-items:center;gap:12px;padding:14px 18px;border-radius:14px;background:#eefaf3;border:1px solid #c9ecd7;color:#17623c;font-size:0.92rem;font-weight:600;">✅ {{ message }}</div>
+          {% elif category == 'danger' %}
+            <div style="display:flex;align-items:center;gap:12px;padding:14px 18px;border-radius:14px;background:#fff1f1;border:1px solid #f7c9c9;color:#9f1f1f;font-size:0.92rem;font-weight:600;">❌ {{ message }}</div>
+          {% else %}
+            <div style="display:flex;align-items:center;gap:12px;padding:14px 18px;border-radius:14px;background:#fff8e8;border:1px solid #f3dfab;color:#97630a;font-size:0.92rem;font-weight:600;">⚠️ {{ message }}</div>
+          {% endif %}
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <form method="POST" action="{{ url_for('main.user_settings') }}">
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+
+      <!-- ── CARD 1: Scheduling ── -->
+      <div class="table-card" style="overflow:visible;">
+        <div class="table-card-header">
+          <div>
+            <div class="table-card-title">⏱ Scheduling</div>
+            <div class="table-card-subtitle">How often should the scraper run?</div>
+          </div>
+        </div>
+        <div style="padding:24px;">
+
+          <label style="font-size:0.8rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;display:block;margin-bottom:10px;">
+            Run Frequency
+          </label>
+
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;">
+            {% set freq_options = [('1', '1 Hour'), ('2', '2 Hours'), ('5', '5 Hours'), ('10', '10 Hours'), ('24', '24 Hours'), ('custom', 'Custom')] %}
+            {% for val, label in freq_options %}
+            <label style="cursor:pointer;">
+              <input type="radio" name="run_frequency" value="{{ val }}"
+                {{ 'checked' if (settings.run_frequency or '1') == val else '' }}
+                style="display:none;" class="freq-radio" onchange="toggleCustomFreq()">
+              <div class="freq-option {{ 'freq-selected' if (settings.run_frequency or '1') == val else '' }}"
+                style="padding:12px 10px;border-radius:12px;border:1px solid var(--border);
+                       text-align:center;font-size:0.84rem;font-weight:700;color:var(--text-dark);
+                       background:#fff;transition:all 0.18s;cursor:pointer;"
+                onclick="selectFreq('{{ val }}')">
+                {{ label }}
+              </div>
+            </label>
+            {% endfor %}
+          </div>
+
+          <div id="custom-freq-box" style="display:{{ 'block' if (settings.run_frequency or '') == 'custom' else 'none' }};margin-top:14px;">
+            <label style="font-size:0.78rem;font-weight:700;color:var(--text-muted);display:block;margin-bottom:6px;">Custom interval (hours)</label>
+            <input type="number" name="custom_frequency" min="1" max="168"
+              value="{{ settings.custom_frequency or '' }}"
+              placeholder="e.g. 3"
+              style="width:140px;padding:10px 14px;border:1px solid #dce4f5;border-radius:10px;font-size:0.9rem;outline:none;">
+          </div>
+
+          <div style="margin-top:20px;padding:14px;background:#f8f9fc;border-radius:12px;border:1px solid var(--border);">
+            <div style="font-size:0.78rem;font-weight:700;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.06em;">Scraper Status</div>
+            <div style="display:flex;align-items:center;justify-content:space-between;">
+              <span style="font-size:0.88rem;color:var(--text-dark);font-weight:600;">Enable Automatic Scraping</span>
+              <label class="toggle-switch">
+                <input type="checkbox" name="scraper_enabled" value="1"
+                  {{ 'checked' if settings.scraper_enabled else '' }}>
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── CARD 2: Publishing Mode ── -->
+      <div class="table-card" style="overflow:visible;">
+        <div class="table-card-header">
+          <div>
+            <div class="table-card-title">📤 Publishing Mode</div>
+            <div class="table-card-subtitle">How should articles be published?</div>
+          </div>
+        </div>
+        <div style="padding:24px;">
+
+          <!-- Auto -->
+          <label style="cursor:pointer;display:block;margin-bottom:12px;">
+            <input type="radio" name="publish_mode" value="auto"
+              {{ 'checked' if (settings.publish_mode or 'manual') == 'auto' else '' }}
+              style="display:none;" class="pub-radio" onchange="updatePublishUI()">
+            <div class="pub-option {{ 'pub-selected' if (settings.publish_mode or 'manual') == 'auto' else '' }}"
+              style="padding:16px 18px;border-radius:14px;border:1px solid var(--border);
+                     background:#fff;transition:all 0.18s;cursor:pointer;"
+              onclick="selectPubMode('auto')">
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+                <span style="font-size:1.2rem;">⚡</span>
+                <span style="font-size:0.92rem;font-weight:800;color:var(--text-dark);">Automatic Publishing</span>
+              </div>
+              <div style="font-size:0.82rem;color:var(--text-muted);line-height:1.55;padding-left:30px;">
+                News is published automatically without manual review.
+                Email will contain a <strong>link</strong> to the hosted PDF (no attachment).
+              </div>
+            </div>
+          </label>
+
+          <!-- Manual -->
+          <label style="cursor:pointer;display:block;">
+            <input type="radio" name="publish_mode" value="manual"
+              {{ 'checked' if (settings.publish_mode or 'manual') == 'manual' else '' }}
+              style="display:none;" class="pub-radio" onchange="updatePublishUI()">
+            <div class="pub-option {{ 'pub-selected' if (settings.publish_mode or 'manual') == 'manual' else '' }}"
+              style="padding:16px 18px;border-radius:14px;border:1px solid var(--border);
+                     background:#fff;transition:all 0.18s;cursor:pointer;"
+              onclick="selectPubMode('manual')">
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+                <span style="font-size:1.2rem;">👤</span>
+                <span style="font-size:0.92rem;font-weight:800;color:var(--text-dark);">Manual Publishing</span>
+              </div>
+              <div style="font-size:0.82rem;color:var(--text-muted);line-height:1.55;padding-left:30px;">
+                You review and select articles before publishing.
+                Email will have PDFs <strong>attached</strong>.
+              </div>
+            </div>
+          </label>
+
+          <!-- Email behaviour note (auto) -->
+          <div id="auto-email-note" style="display:{{ 'flex' if (settings.publish_mode or 'manual') == 'auto' else 'none' }};
+               margin-top:14px;gap:10px;padding:12px 14px;background:#eef5ff;
+               border:1px solid #cadcff;border-radius:10px;color:#2350b8;font-size:0.82rem;">
+            <span>📧</span>
+            <span>In Auto mode, the email will include a <strong>View PDF</strong> link pointing to your hosted page instead of attaching the file.</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── CARD 3: Content Filter ── -->
+      <div class="table-card" style="overflow:visible;">
+        <div class="table-card-header">
+          <div>
+            <div class="table-card-title">📂 Content Categories</div>
+            <div class="table-card-subtitle">Which news categories should be shown and published?</div>
+          </div>
+        </div>
+        <div style="padding:24px;">
+
+          <div style="font-size:0.78rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:12px;">
+            Select Categories
+          </div>
+
+          {% set categories = [
+            ('all',         '🌐', 'All News',          'Every article regardless of category'),
+            ('agricultural','🌾', 'Agricultural News',  'Farming, crops, fertilizers, agri markets'),
+            ('weather',     '⛅', 'Weather News',       'Climate, monsoon, temperature updates'),
+            ('financial',   '📈', 'Financial News',     'Markets, stocks, economy, commodities'),
+            ('energy',      '⚡', 'Energy News',        'Oil, gas, power, renewables'),
+          ] %}
+
+          {% set active_cats = (settings.content_categories or 'all').split(',') %}
+
+          <div style="display:flex;flex-direction:column;gap:8px;" id="cat-list">
+            {% for val, icon, label, desc in categories %}
+            <label style="cursor:pointer;display:flex;align-items:center;gap:12px;
+                          padding:12px 14px;border-radius:12px;border:1px solid var(--border);
+                          background:#fff;transition:all 0.15s;"
+                   class="cat-label {{ 'cat-selected' if val in active_cats else '' }}"
+                   id="cat-label-{{ val }}">
+              <input type="checkbox" name="content_categories" value="{{ val }}"
+                {{ 'checked' if val in active_cats else '' }}
+                class="cat-checkbox" data-val="{{ val }}"
+                style="width:16px;height:16px;accent-color:var(--navy);"
+                onchange="handleCatChange('{{ val }}')">
+              <span style="font-size:1.1rem;">{{ icon }}</span>
+              <div>
+                <div style="font-size:0.88rem;font-weight:700;color:var(--text-dark);">{{ label }}</div>
+                <div style="font-size:0.76rem;color:var(--text-muted);margin-top:1px;">{{ desc }}</div>
+              </div>
+            </label>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+
+      <!-- ── CARD 4: Email Preferences ── -->
+      <div class="table-card" style="overflow:visible;">
+        <div class="table-card-header">
+          <div>
+            <div class="table-card-title">📧 Email Preferences</div>
+            <div class="table-card-subtitle">Who receives the daily news digest?</div>
+          </div>
+        </div>
+        <div style="padding:24px;display:flex;flex-direction:column;gap:18px;">
+
+          <div>
+            <label style="font-size:0.78rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;display:block;margin-bottom:6px;">
+              Primary Recipient
+            </label>
+            <input type="email" name="email_recipient" value="{{ settings.email_recipient or 'niyati.b@seamlessautomations.com' }}"
+              style="width:100%;padding:11px 14px;border:1px solid #dce4f5;border-radius:10px;font-size:0.9rem;outline:none;color:var(--text-dark);">
+          </div>
+
+          <div>
+            <label style="font-size:0.78rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;display:block;margin-bottom:6px;">
+              CC Recipients <span style="font-weight:500;opacity:0.7;">(comma-separated)</span>
+            </label>
+            <input type="text" name="email_cc" value="{{ settings.email_cc or '' }}"
+              placeholder="e.g. manager@company.com, team@company.com"
+              style="width:100%;padding:11px 14px;border:1px solid #dce4f5;border-radius:10px;font-size:0.9rem;outline:none;color:var(--text-dark);">
+          </div>
+
+          <div>
+            <label style="font-size:0.78rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;display:block;margin-bottom:6px;">
+              Email Subject Prefix
+            </label>
+            <input type="text" name="email_subject_prefix" value="{{ settings.email_subject_prefix or 'Daily News Alert' }}"
+              style="width:100%;padding:11px 14px;border:1px solid #dce4f5;border-radius:10px;font-size:0.9rem;outline:none;color:var(--text-dark);">
+          </div>
+
+          <div style="padding:14px;background:#f8f9fc;border-radius:12px;border:1px solid var(--border);">
+            <div style="display:flex;align-items:center;justify-content:space-between;">
+              <div>
+                <div style="font-size:0.88rem;font-weight:700;color:var(--text-dark);">Send Email on Publish</div>
+                <div style="font-size:0.76rem;color:var(--text-muted);margin-top:2px;">Automatically send email when articles are published</div>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" name="email_on_publish" value="1"
+                  {{ 'checked' if settings.email_on_publish else 'checked' }}>
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Save button -->
+    <div style="margin-top:24px;display:flex;justify-content:flex-end;gap:12px;">
+      <a href="{{ url_for('main.home') }}" class="btn btn-ghost" style="padding:11px 24px;">Cancel</a>
+      <button type="submit" class="btn btn-primary" style="padding:11px 28px;font-size:0.95rem;">
+        💾 Save Settings
+      </button>
+    </div>
+
+  </form>
+</div>
+
+<style>
+/* Toggle switch */
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 46px;
+  height: 26px;
+  flex-shrink: 0;
+}
+.toggle-switch input { opacity: 0; width: 0; height: 0; }
+.toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  inset: 0;
+  background: #d1d5db;
+  border-radius: 999px;
+  transition: 0.22s;
+}
+.toggle-slider::before {
+  content: "";
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  left: 3px;
+  bottom: 3px;
+  background: #fff;
+  border-radius: 50%;
+  transition: 0.22s;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.18);
+}
+.toggle-switch input:checked + .toggle-slider { background: var(--navy); }
+.toggle-switch input:checked + .toggle-slider::before { transform: translateX(20px); }
+
+/* Frequency option selected state */
+.freq-selected {
+  background: var(--navy) !important;
+  color: #fff !important;
+  border-color: var(--navy) !important;
+}
+
+/* Publishing mode selected */
+.pub-selected {
+  border-color: var(--navy) !important;
+  background: #f0f4fb !important;
+  box-shadow: 0 0 0 2px rgba(26,42,108,0.12);
+}
+
+/* Category selected */
+.cat-selected {
+  border-color: var(--navy) !important;
+  background: #f0f4fb !important;
+}
+</style>
+
+<script>
+// ── Frequency picker ──────────────────────────────────────────
+function selectFreq(val) {
+  document.querySelectorAll('.freq-radio').forEach(r => r.checked = r.value === val);
+  document.querySelectorAll('.freq-option').forEach(el => el.classList.remove('freq-selected'));
+  event.currentTarget.classList.add('freq-selected');
+  toggleCustomFreq();
+}
+function toggleCustomFreq() {
+  const selected = document.querySelector('.freq-radio:checked');
+  document.getElementById('custom-freq-box').style.display =
+    selected && selected.value === 'custom' ? 'block' : 'none';
+}
+
+// ── Publishing mode picker ────────────────────────────────────
+function selectPubMode(val) {
+  document.querySelectorAll('.pub-radio').forEach(r => r.checked = r.value === val);
+  document.querySelectorAll('.pub-option').forEach(el => el.classList.remove('pub-selected'));
+  event.currentTarget.classList.add('pub-selected');
+  updatePublishUI();
+}
+function updatePublishUI() {
+  const r = document.querySelector('.pub-radio:checked');
+  document.getElementById('auto-email-note').style.display =
+    r && r.value === 'auto' ? 'flex' : 'none';
+}
+
+// ── Category "All News" logic ─────────────────────────────────
+function handleCatChange(val) {
+  const cb = document.querySelector(`.cat-checkbox[data-val="${val}"]`);
+  if (val === 'all' && cb.checked) {
+    // Uncheck all others when "All" selected
+    document.querySelectorAll('.cat-checkbox').forEach(c => {
+      if (c.dataset.val !== 'all') { c.checked = false; updateCatLabel(c.dataset.val, false); }
+    });
+  } else if (val !== 'all' && cb.checked) {
+    // Uncheck "All" if specific category selected
+    const allCb = document.querySelector('.cat-checkbox[data-val="all"]');
+    if (allCb) { allCb.checked = false; updateCatLabel('all', false); }
+  }
+  updateCatLabel(val, cb.checked);
+}
+function updateCatLabel(val, checked) {
+  const lbl = document.getElementById('cat-label-' + val);
+  if (lbl) {
+    if (checked) lbl.classList.add('cat-selected');
+    else         lbl.classList.remove('cat-selected');
+  }
+}
+</script>
+{% endblock %}

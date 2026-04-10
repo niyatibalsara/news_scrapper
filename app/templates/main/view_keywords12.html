@@ -1,0 +1,419 @@
+{% extends 'base.html' %}
+{% block title %}View Keywords — Seamless{% endblock %}
+
+{% block content %}
+<div class="page-container">
+
+  <div class="page-head">
+    <div class="breadcrumb-row">
+      <a href="{{ url_for('main.home') }}">Dashboard</a>
+      <span class="sep">›</span>
+      <span>View Master</span>
+      <span class="sep">›</span>
+      <span>View Keywords</span>
+    </div>
+    <h1>View Keywords</h1>
+    <p>All registered keywords for news scraping.</p>
+  </div>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px;">
+        {% for category, message in messages %}
+          {% if category == 'success' %}
+            <div style="display:flex;align-items:center;gap:12px;padding:14px 18px;border-radius:14px;background:#eefaf3;border:1px solid #c9ecd7;color:#17623c;font-size:0.92rem;font-weight:600;">
+              ✅ {{ message }}
+            </div>
+          {% elif category == 'danger' %}
+            <div style="display:flex;align-items:center;gap:12px;padding:14px 18px;border-radius:14px;background:#fff1f1;border:1px solid #f7c9c9;color:#9f1f1f;font-size:0.92rem;font-weight:600;">
+              ❌ {{ message }}
+            </div>
+          {% else %}
+            <div style="display:flex;align-items:center;gap:12px;padding:14px 18px;border-radius:14px;background:#fff8e8;border:1px solid #f3dfab;color:#97630a;font-size:0.92rem;font-weight:600;">
+              ⚠️ {{ message }}
+            </div>
+          {% endif %}
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <!-- Instruction banner -->
+  <div style="display:flex;align-items:flex-start;gap:14px;padding:16px 20px;margin-bottom:20px;
+              background:#eef5ff;border:1px solid #cadcff;border-radius:14px;color:#2350b8;">
+    <span style="font-size:1.2rem;flex-shrink:0;">ℹ️</span>
+    <div style="font-size:0.88rem;line-height:1.65;">
+      <strong>Keyword Guidelines:</strong> Each row can hold a maximum of <strong>10 keywords</strong>.
+      Keywords are used to match and filter news articles during scraping.
+      Use the chip input below — type a keyword and press <kbd style="background:#fff;border:1px solid #cadcff;border-radius:5px;padding:1px 6px;font-size:0.8rem;">Enter</kbd> or <kbd style="background:#fff;border:1px solid #cadcff;border-radius:5px;padding:1px 6px;font-size:0.8rem;">,</kbd> to add it.
+      Click the <strong>×</strong> on a chip to remove it before saving.
+    </div>
+  </div>
+
+  <form method="POST" action="{{ url_for('main.view_keywords') }}" id="main-form">
+    <input type="hidden" name="action" id="form-action" value="">
+
+    <div class="table-card">
+      <div class="table-card-header">
+        <div>
+          <div class="table-card-title">Keywords for Scraping</div>
+          <div class="table-card-subtitle">Words configured for news article matching</div>
+        </div>
+        <div class="table-controls">
+          <div class="tbl-search">
+            <span class="tbl-search-icon">🔍</span>
+            <input class="tbl-search-input" type="text" id="searchInput"
+              placeholder="Search keywords…" oninput="filterTable()" />
+          </div>
+          <button type="button" class="btn btn-primary" onclick="showAddRow()">+ Add Row</button>
+          <button type="button" class="btn btn-primary" onclick="submitEdit()">✏️ Edit</button>
+          <button type="button" class="btn btn-danger" onclick="submitBulkDelete()">🗑 Delete</button>
+        </div>
+      </div>
+
+      <!-- ADD ROW (hidden by default) -->
+      <div id="add-row" style="display:none;padding:18px 22px;border-bottom:1px solid var(--border);background:#f8faff;">
+        <div style="font-size:0.82rem;font-weight:700;color:var(--text-muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.06em;">
+          New Keyword Row
+        </div>
+        <div style="display:grid;grid-template-columns:110px 1fr auto auto;gap:12px;align-items:start;">
+          <div>
+            <label style="font-size:0.78rem;font-weight:700;color:var(--text-muted);display:block;margin-bottom:5px;">SR. NO</label>
+            <input type="number" name="sr_no" id="add-sr-no" placeholder="e.g. 2" min="1"
+              style="width:100%;padding:10px 12px;border:1px solid #dce4f5;border-radius:10px;font-size:0.88rem;outline:none;">
+          </div>
+          <div>
+            <label style="font-size:0.78rem;font-weight:700;color:var(--text-muted);display:block;margin-bottom:5px;">
+              KEYWORDS <span style="font-weight:500;opacity:0.7;">(max 10 — press Enter or comma to add)</span>
+            </label>
+            <!-- Chip input container -->
+            <div id="chip-container-add"
+              style="min-height:46px;padding:6px 10px;border:1px solid #dce4f5;border-radius:10px;
+                     background:#fff;display:flex;flex-wrap:wrap;gap:6px;align-items:center;cursor:text;"
+              onclick="document.getElementById('chip-input-add').focus()">
+              <input id="chip-input-add" type="text" placeholder="Type keyword…"
+                style="border:none;outline:none;font-size:0.88rem;min-width:120px;flex:1;padding:2px 4px;background:transparent;"
+                onkeydown="handleChipKey(event,'add')" />
+            </div>
+            <!-- Hidden field that holds comma-separated keywords -->
+            <input type="hidden" name="keyword" id="add-keyword-value" value="">
+            <div id="add-chip-counter" style="font-size:0.75rem;color:var(--text-muted);margin-top:4px;">0 / 10 keywords</div>
+          </div>
+          <div style="padding-top:22px;">
+            <button type="button" class="btn btn-primary" onclick="submitAdd()">Add Row</button>
+          </div>
+          <div style="padding-top:22px;">
+            <button type="button" class="btn btn-ghost" onclick="hideAddRow()">Cancel</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="tbl-wrap">
+        <table class="seamless-table" id="keywords-table">
+          <thead>
+            <tr>
+              <th style="width:44px;">
+                <input type="checkbox" id="select-all" onclick="toggleSelectAll(this)">
+              </th>
+              <th class="col-srno">Sr. No</th>
+              <th>Keywords <span style="font-weight:500;opacity:0.6;font-size:0.7rem;">(max 10 per row)</span></th>
+            </tr>
+          </thead>
+
+          <tbody id="keywords-tbody">
+            {% if keywords %}
+              {% for item in keywords %}
+              {% set kw_list = item.keyword.split(',') if item.keyword else [] %}
+              <tr id="row-{{ item.id }}" data-id="{{ item.id }}">
+                <td style="width:44px;">
+                  <input type="checkbox" name="selected_keywords" value="{{ item.id }}" class="row-checkbox">
+                </td>
+                <td class="col-srno">{{ item.sr_no }}</td>
+
+                <!-- VIEW mode — chips display -->
+                <td class="keyword-view-{{ item.id }}" style="padding:14px 20px;">
+                  <div style="display:flex;flex-wrap:wrap;gap:6px;">
+                    {% for kw in kw_list %}
+                      {% set kw = kw.strip() %}
+                      {% if kw %}
+                      <span style="display:inline-flex;align-items:center;gap:5px;
+                                   padding:5px 12px;border-radius:999px;
+                                   background:#eef3fb;border:1px solid #c8d5f1;
+                                   color:#1a2a6c;font-size:0.78rem;font-weight:600;
+                                   white-space:nowrap;">
+                        {{ kw }}
+                      </span>
+                      {% endif %}
+                    {% endfor %}
+                    {% if kw_list|length == 0 %}
+                      <span style="color:var(--text-muted);font-size:0.85rem;">—</span>
+                    {% endif %}
+                  </div>
+                  <div style="margin-top:6px;font-size:0.72rem;color:var(--text-muted);">
+                    {{ kw_list|length }} keyword{{ 's' if kw_list|length != 1 else '' }}
+                  </div>
+                </td>
+
+                <!-- EDIT mode (hidden) — chip input -->
+                <td class="keyword-edit-{{ item.id }}" style="display:none;padding:12px 20px;">
+                  <label style="font-size:0.75rem;font-weight:700;color:var(--text-muted);display:block;margin-bottom:6px;">
+                    EDIT KEYWORDS <span style="font-weight:500;">(max 10 — Enter or comma to add)</span>
+                  </label>
+                  <div id="chip-container-{{ item.id }}"
+                    style="min-height:46px;padding:6px 10px;border:1px solid #c8d5f1;border-radius:10px;
+                           background:#fff;display:flex;flex-wrap:wrap;gap:6px;align-items:center;cursor:text;"
+                    onclick="document.getElementById('chip-input-{{ item.id }}').focus()">
+                    <!-- existing chips injected by JS -->
+                    <input id="chip-input-{{ item.id }}" type="text" placeholder="Add keyword…"
+                      style="border:none;outline:none;font-size:0.88rem;min-width:100px;flex:1;padding:2px 4px;background:transparent;"
+                      onkeydown="handleChipKey(event,'{{ item.id }}')" />
+                  </div>
+                  <input type="hidden" id="edit-chip-value-{{ item.id }}" value="{{ item.keyword }}">
+                  <div id="chip-counter-{{ item.id }}" style="font-size:0.75rem;color:var(--text-muted);margin-top:4px;">
+                    {{ kw_list|length }} / 10 keywords
+                  </div>
+                  <div style="display:flex;gap:8px;margin-top:10px;">
+                    <button type="button" class="btn btn-primary" style="padding:7px 16px;font-size:0.84rem;"
+                      onclick="saveEditRow({{ item.id }})">Save</button>
+                    <button type="button" class="btn btn-ghost" style="padding:7px 16px;font-size:0.84rem;"
+                      onclick="cancelEditRow({{ item.id }})">Cancel</button>
+                  </div>
+                </td>
+              </tr>
+              {% endfor %}
+            {% else %}
+              <tr id="empty-row">
+                <td colspan="3">
+                  <div class="tbl-empty">
+                    <div class="tbl-empty-icon">🔑</div>
+                    <div class="tbl-empty-text">No keywords registered yet. Click "+ Add Row" to begin.</div>
+                  </div>
+                </td>
+              </tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="table-card-footer">
+        <span>Showing <strong id="entry-count">{{ keywords|length }}</strong> entries</span>
+        <div class="pagination">
+          <button class="pg-btn" type="button">‹</button>
+          <button class="pg-btn active" type="button">1</button>
+          <button class="pg-btn" type="button">›</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Hidden fields for form submission -->
+    <input type="hidden" name="keyword_id"    id="edit-keyword-id"    value="">
+    <input type="hidden" name="edit_keyword"  id="edit-keyword-value" value="">
+  </form>
+</div>
+
+<style>
+  .chip-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px 4px 12px;
+    border-radius: 999px;
+    background: #e0e9ff;
+    border: 1px solid #b8caff;
+    color: #1a2a6c;
+    font-size: 0.78rem;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: default;
+  }
+  .chip-tag .chip-remove {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: rgba(26,42,108,0.12);
+    color: #1a2a6c;
+    font-size: 0.7rem;
+    cursor: pointer;
+    transition: background 0.15s;
+    border: none;
+    padding: 0;
+    line-height: 1;
+  }
+  .chip-tag .chip-remove:hover {
+    background: #dc2626;
+    color: #fff;
+  }
+  kbd {
+    font-family: inherit;
+  }
+</style>
+
+<script>
+// ── Chip state: rowId → array of keyword strings ──────────────
+const chipState = {};
+
+function getChips(rowId) {
+  return chipState[rowId] || [];
+}
+
+function setChips(rowId, arr) {
+  chipState[rowId] = arr;
+}
+
+function renderChips(rowId) {
+  const container = document.getElementById('chip-container-' + rowId);
+  const input     = document.getElementById('chip-input-' + rowId);
+  const counter   = document.getElementById(rowId === 'add' ? 'add-chip-counter' : 'chip-counter-' + rowId);
+  if (!container || !input) return;
+
+  // Remove old chip elements (keep the input)
+  Array.from(container.querySelectorAll('.chip-tag')).forEach(el => el.remove());
+
+  const chips = getChips(rowId);
+  chips.forEach((kw, i) => {
+    const tag = document.createElement('span');
+    tag.className = 'chip-tag';
+    tag.innerHTML = `${kw} <button type="button" class="chip-remove" onclick="removeChip('${rowId}',${i})">×</button>`;
+    container.insertBefore(tag, input);
+  });
+
+  if (counter) counter.textContent = `${chips.length} / 10 keywords`;
+
+  // Update hidden value
+  const hidden = document.getElementById(rowId === 'add' ? 'add-keyword-value' : 'edit-chip-value-' + rowId);
+  if (hidden) hidden.value = chips.join(', ');
+}
+
+function addChip(rowId, value) {
+  const kw = value.trim().replace(/,$/, '').trim();
+  if (!kw) return;
+  const chips = getChips(rowId);
+  if (chips.length >= 10) {
+    alert('Maximum 10 keywords per row.');
+    return;
+  }
+  if (!chips.includes(kw)) {
+    chips.push(kw);
+    setChips(rowId, chips);
+    renderChips(rowId);
+  }
+}
+
+function removeChip(rowId, index) {
+  const chips = getChips(rowId);
+  chips.splice(index, 1);
+  setChips(rowId, chips);
+  renderChips(rowId);
+}
+
+function handleChipKey(e, rowId) {
+  const input = e.target;
+  if (e.key === 'Enter' || e.key === ',') {
+    e.preventDefault();
+    addChip(rowId, input.value);
+    input.value = '';
+  } else if (e.key === 'Backspace' && input.value === '') {
+    const chips = getChips(rowId);
+    if (chips.length > 0) {
+      chips.pop();
+      setChips(rowId, chips);
+      renderChips(rowId);
+    }
+  }
+}
+
+// ── ADD ROW ───────────────────────────────────────────────────
+function showAddRow() {
+  setChips('add', []);
+  renderChips('add');
+  document.getElementById('add-row').style.display = 'block';
+  document.getElementById('add-sr-no').focus();
+}
+
+function hideAddRow() {
+  document.getElementById('add-row').style.display = 'none';
+  document.getElementById('add-sr-no').value = '';
+  setChips('add', []);
+  renderChips('add');
+}
+
+function submitAdd() {
+  const srNo = document.getElementById('add-sr-no').value.trim();
+  const chips = getChips('add');
+  if (!srNo) { alert('Sr. No is required.'); return; }
+  if (chips.length === 0) { alert('Add at least one keyword.'); return; }
+  document.getElementById('add-keyword-value').value = chips.join(', ');
+  document.getElementById('form-action').value = 'add';
+  document.getElementById('main-form').submit();
+}
+
+// ── EDIT ROW ──────────────────────────────────────────────────
+function submitEdit() {
+  const checked = document.querySelectorAll('.row-checkbox:checked');
+  if (checked.length === 0) { alert('Please select a row to edit.'); return; }
+  if (checked.length > 1)   { alert('Please select only one row to edit.'); return; }
+  const id = checked[0].value;
+
+  // Pre-populate chips from existing value
+  const hidden = document.getElementById('edit-chip-value-' + id);
+  const existing = hidden ? hidden.value.split(',').map(s => s.trim()).filter(Boolean) : [];
+  setChips(id, existing);
+  renderChips(id);
+
+  // Close any other open rows
+  document.querySelectorAll('tr[id^="row-"]').forEach(row => {
+    const rid = row.dataset.id;
+    if (rid !== id) cancelEditRow(rid);
+  });
+
+  document.querySelector('.keyword-view-' + id).style.display = 'none';
+  document.querySelector('.keyword-edit-' + id).style.display = '';
+  document.getElementById('chip-input-' + id).focus();
+}
+
+function cancelEditRow(id) {
+  const v = document.querySelector('.keyword-view-' + id);
+  const e = document.querySelector('.keyword-edit-' + id);
+  if (v) v.style.display = '';
+  if (e) e.style.display = 'none';
+}
+
+function saveEditRow(id) {
+  const chips = getChips(id);
+  if (chips.length === 0) { alert('At least one keyword is required.'); return; }
+  document.getElementById('form-action').value        = 'edit';
+  document.getElementById('edit-keyword-id').value    = id;
+  document.getElementById('edit-keyword-value').value = chips.join(', ');
+  document.getElementById('main-form').submit();
+}
+
+// ── BULK DELETE ───────────────────────────────────────────────
+function toggleSelectAll(master) {
+  document.querySelectorAll('.row-checkbox').forEach(cb => cb.checked = master.checked);
+}
+
+function submitBulkDelete() {
+  const checked = document.querySelectorAll('.row-checkbox:checked');
+  if (checked.length === 0) { alert('Please select at least one row to delete.'); return; }
+  if (!confirm(`Delete ${checked.length} selected keyword row(s)?`)) return;
+  document.getElementById('form-action').value = 'bulk_delete';
+  document.getElementById('main-form').submit();
+}
+
+// ── SEARCH ────────────────────────────────────────────────────
+function filterTable() {
+  const q = document.getElementById('searchInput').value.toLowerCase();
+  let visible = 0;
+  document.querySelectorAll('#keywords-tbody tr[id^="row-"]').forEach(row => {
+    const text = row.textContent.toLowerCase();
+    const show = text.includes(q);
+    row.style.display = show ? '' : 'none';
+    if (show) visible++;
+  });
+  document.getElementById('entry-count').textContent = visible;
+}
+</script>
+{% endblock %}
