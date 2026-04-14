@@ -1,8 +1,13 @@
-from playwright.sync_api import sync_playwright
-with sync_playwright() as p:
-    b = p.chromium.launch(headless=True, args=['--no-sandbox'])
-    page = b.new_page()
-    page.goto('https://www.thehindu.com', wait_until='domcontentloaded', timeout=20000)
-    print('Title:', page.title())
-    b.close()
-    print('Playwright OK')
+import requests
+url = 'https://www.thehindu.com/news/national/karnataka/display-of-lpg-cng-prices-and-stock-made-mandatoryin-dharwad-district-of-karnataka/article70854113.ece'
+r = requests.get(url, headers={'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)', 'Referer': 'https://www.google.com/'})
+print('Status:', r.status_code)
+print('Length:', len(r.text))
+# Count paragraphs
+from bs4 import BeautifulSoup
+soup = BeautifulSoup(r.text, 'lxml')
+paras = soup.find_all('p')
+print('Paragraphs found:', len(paras))
+for i, p in enumerate(paras[:10]):
+    print(f'  P{i}:', p.get_text(strip=True)[:100])
+"

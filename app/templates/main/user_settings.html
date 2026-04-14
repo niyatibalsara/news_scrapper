@@ -1,6 +1,97 @@
 {% extends 'base.html' %}
 {% block title %}User Settings — Seamless{% endblock %}
 
+{# ══════════════════════════════════════════════════════════════
+   MACROS
+══════════════════════════════════════════════════════════════ #}
+
+{% macro _schedule_summary(sched) %}
+{%- set stype = sched.get('type', '') if sched else '' -%}
+{%- if not sched or not stype -%}Not set
+{%- elif stype == 'interval' -%}Every {{ sched.get('interval_hours','1') }} {{ sched.get('interval_unit','hours') }}
+{%- elif stype == 'daily' -%}Daily @ {{ sched.get('time_hhmm','08:00') }}
+{%- elif stype == 'weekly' -%}{{ sched.get('weekly_day','monday')|capitalize }} @ {{ sched.get('time_hhmm','08:00') }}
+{%- else -%}Configured
+{%- endif -%}
+{% endmacro %}
+
+{% macro _render_schedule_inline(cat_key, sched) %}
+{%- set sched  = sched if sched else {} -%}
+{%- set stype  = sched.get('type',           'interval') -%}
+{%- set ihours = sched.get('interval_hours', '1') -%}
+{%- set iunit  = sched.get('interval_unit',  'hours') -%}
+{%- set wday   = sched.get('weekly_day',     'monday') -%}
+{%- set stime  = sched.get('time_hhmm',      '08:00') -%}
+
+<div class="sched-row" data-cat="{{ cat_key }}" style="margin-top:12px;">
+
+  <!-- Type pill buttons -->
+  <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;">
+    {% for tv, tl in [('interval','Interval'),('daily','Daily'),('weekly','Weekly')] %}
+    <button type="button"
+            class="stype-btn {{ 'stype-active' if stype == tv else '' }}"
+            data-cat="{{ cat_key }}" data-type="{{ tv }}"
+            onclick="setSchedType('{{ cat_key }}','{{ tv }}')"
+            style="padding:5px 12px;border-radius:20px;font-size:0.76rem;font-weight:700;
+                   border:1px solid {{ 'var(--navy)' if stype == tv else 'var(--border)' }};
+                   cursor:pointer;transition:all 0.15s;
+                   background:{{ 'var(--navy)' if stype == tv else '#f8f9fc' }};
+                   color:{{ '#fff' if stype == tv else 'var(--text-muted)' }};">
+      {{ tl }}
+    </button>
+    {% endfor %}
+  </div>
+
+  <!-- Interval -->
+  <div id="sched-interval-{{ cat_key }}"
+       style="display:{{ 'flex' if stype == 'interval' else 'none' }};align-items:center;gap:8px;flex-wrap:wrap;">
+    <span style="font-size:0.82rem;color:var(--text-muted);white-space:nowrap;">Run every</span>
+    <input type="number" name="sched_{{ cat_key }}_interval_hours"
+           min="1" max="999" value="{{ ihours }}"
+           style="width:68px;padding:7px 10px;border:1px solid #dce4f5;
+                  border-radius:8px;font-size:0.88rem;outline:none;font-weight:700;color:var(--text-dark);">
+    <select name="sched_{{ cat_key }}_interval_unit"
+            style="padding:7px 10px;border:1px solid #dce4f5;border-radius:8px;
+                   font-size:0.84rem;outline:none;background:#fff;font-weight:600;color:var(--text-dark);">
+      <option value="minutes" {{ 'selected' if iunit == 'minutes' else '' }}>Minutes</option>
+      <option value="hours"   {{ 'selected' if iunit == 'hours'   else '' }}>Hours</option>
+    </select>
+  </div>
+
+  <!-- Daily -->
+  <div id="sched-daily-{{ cat_key }}"
+       style="display:{{ 'flex' if stype == 'daily' else 'none' }};align-items:center;gap:8px;">
+    <span style="font-size:0.82rem;color:var(--text-muted);white-space:nowrap;">Every day at</span>
+    <input type="time" name="sched_{{ cat_key }}_time" value="{{ stime }}"
+           style="padding:7px 10px;border:1px solid #dce4f5;border-radius:8px;
+                  font-size:0.88rem;outline:none;font-weight:700;color:var(--text-dark);">
+  </div>
+
+  <!-- Weekly -->
+  <div id="sched-weekly-{{ cat_key }}"
+       style="display:{{ 'flex' if stype == 'weekly' else 'none' }};align-items:center;gap:8px;flex-wrap:wrap;">
+    <span style="font-size:0.82rem;color:var(--text-muted);white-space:nowrap;">Every</span>
+    <select name="sched_{{ cat_key }}_weekly_day"
+            style="padding:7px 10px;border:1px solid #dce4f5;border-radius:8px;
+                   font-size:0.84rem;outline:none;background:#fff;font-weight:600;color:var(--text-dark);">
+      {% for dv,dl in [('monday','Monday'),('tuesday','Tuesday'),('wednesday','Wednesday'),
+                       ('thursday','Thursday'),('friday','Friday'),
+                       ('saturday','Saturday'),('sunday','Sunday')] %}
+      <option value="{{ dv }}" {{ 'selected' if wday == dv else '' }}>{{ dl }}</option>
+      {% endfor %}
+    </select>
+    <span style="font-size:0.82rem;color:var(--text-muted);">at</span>
+    <input type="time" name="sched_{{ cat_key }}_weekly_time" value="{{ stime }}"
+           style="padding:7px 10px;border:1px solid #dce4f5;border-radius:8px;
+                  font-size:0.88rem;outline:none;font-weight:700;color:var(--text-dark);">
+  </div>
+
+  <input type="hidden" name="sched_{{ cat_key }}_type"
+         value="{{ stype }}" id="sched-type-hidden-{{ cat_key }}">
+</div>
+{% endmacro %}
+
+
 {% block content %}
 <div class="page-container">
 
@@ -14,7 +105,6 @@
     <p>Control scheduling, publishing preferences, and content filters.</p>
   </div>
 
-  <!-- Flash messages -->
   {% with messages = get_flashed_messages(with_categories=true) %}
     {% if messages %}
       <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px;">
@@ -33,224 +123,284 @@
 
   <form method="POST" action="{{ url_for('main.user_settings') }}">
 
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+    <div style="display:grid;grid-template-columns:1fr 380px;gap:20px;align-items:stretch;">
 
-      <!-- ── CARD 1: Scheduling ── -->
-      <div class="table-card" style="overflow:visible;">
+      <!-- ══ LEFT · Categories & Scheduling ══ -->
+      <div class="table-card" style="overflow:visible;display:flex;flex-direction:column;">
         <div class="table-card-header">
           <div>
-            <div class="table-card-title">⏱ Scheduling</div>
-            <div class="table-card-subtitle">How often should the scraper run?</div>
+            <div class="table-card-title">📂 Categories &amp; Scheduling</div>
+            <div class="table-card-subtitle">Choose which categories to monitor and set a run schedule for each.</div>
           </div>
         </div>
-        <div style="padding:24px;">
+        <div style="padding:20px 24px 24px;flex:1;display:flex;flex-direction:column;">
 
-          <label style="font-size:0.8rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;display:block;margin-bottom:10px;">
-            Run Frequency
-          </label>
-
-          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;">
-            {% set freq_options = [('1', '1 Hour'), ('2', '2 Hours'), ('5', '5 Hours'), ('10', '10 Hours'), ('24', '24 Hours'), ('custom', 'Custom')] %}
-            {% for val, label in freq_options %}
-            <label style="cursor:pointer;">
-              <input type="radio" name="run_frequency" value="{{ val }}"
-                {{ 'checked' if (settings.run_frequency or '1') == val else '' }}
-                style="display:none;" class="freq-radio" onchange="toggleCustomFreq()">
-              <div class="freq-option {{ 'freq-selected' if (settings.run_frequency or '1') == val else '' }}"
-                style="padding:12px 10px;border-radius:12px;border:1px solid var(--border);
-                       text-align:center;font-size:0.84rem;font-weight:700;color:var(--text-dark);
-                       background:#fff;transition:all 0.18s;cursor:pointer;"
-                onclick="selectFreq('{{ val }}')">
-                {{ label }}
+          <!-- Run All Together toggle -->
+          <div style="display:flex;align-items:center;justify-content:space-between;
+                      padding:12px 16px;background:#f0f4fb;border-radius:12px;
+                      border:1.5px solid var(--navy);margin-bottom:18px;">
+            <div>
+              <div style="font-size:0.88rem;font-weight:800;color:var(--text-dark);">
+                🔄 Run All Together
               </div>
+              <div style="font-size:0.76rem;color:var(--text-muted);margin-top:1px;">
+                One global schedule triggers every active category simultaneously.
+              </div>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" name="sync_all_schedules" value="1" id="syncAllToggle"
+                {{ 'checked' if settings.sync_all_schedules else '' }}
+                onchange="toggleSyncMode()">
+              <span class="toggle-slider"></span>
             </label>
-            {% endfor %}
           </div>
 
-          <div id="custom-freq-box" style="display:{{ 'block' if (settings.run_frequency or '') == 'custom' else 'none' }};margin-top:14px;">
-            <label style="font-size:0.78rem;font-weight:700;color:var(--text-muted);display:block;margin-bottom:6px;">Custom interval (hours)</label>
-            <input type="number" name="custom_frequency" min="1" max="168"
-              value="{{ settings.custom_frequency or '' }}"
-              placeholder="e.g. 3"
-              style="width:140px;padding:10px 14px;border:1px solid #dce4f5;border-radius:10px;font-size:0.9rem;outline:none;">
-          </div>
-
-          <div style="margin-top:20px;padding:14px;background:#f8f9fc;border-radius:12px;border:1px solid var(--border);">
-            <div style="font-size:0.78rem;font-weight:700;color:var(--text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.06em;">Scraper Status</div>
-            <div style="display:flex;align-items:center;justify-content:space-between;">
-              <span style="font-size:0.88rem;color:var(--text-dark);font-weight:600;">Enable Automatic Scraping</span>
-              <label class="toggle-switch">
-                <input type="checkbox" name="scraper_enabled" value="1"
-                  {{ 'checked' if settings.scraper_enabled else '' }}>
-                <span class="toggle-slider"></span>
-              </label>
+          <!-- Global schedule box -->
+          <div id="globalScheduleBox"
+               style="display:{{ 'block' if settings.sync_all_schedules else 'none' }};
+                      margin-bottom:18px;">
+            <div style="padding:14px 16px;border-radius:12px;border:1px solid var(--border);background:#fff;">
+              <div style="font-size:0.75rem;font-weight:700;color:var(--text-muted);
+                          text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px;">
+                🌐 Global Schedule
+              </div>
+              {{ _render_schedule_inline('global', settings.get('schedule_global') or {}) }}
             </div>
           </div>
-        </div>
-      </div>
 
-      <!-- ── CARD 2: Publishing Mode ── -->
-      <div class="table-card" style="overflow:visible;">
-        <div class="table-card-header">
-          <div>
-            <div class="table-card-title">📤 Publishing Mode</div>
-            <div class="table-card-subtitle">How should articles be published?</div>
-          </div>
-        </div>
-        <div style="padding:24px;">
-
-          <!-- Auto -->
-          <label style="cursor:pointer;display:block;margin-bottom:12px;">
-            <input type="radio" name="publish_mode" value="auto"
-              {{ 'checked' if (settings.publish_mode or 'manual') == 'auto' else '' }}
-              style="display:none;" class="pub-radio" onchange="updatePublishUI()">
-            <div class="pub-option {{ 'pub-selected' if (settings.publish_mode or 'manual') == 'auto' else '' }}"
-              style="padding:16px 18px;border-radius:14px;border:1px solid var(--border);
-                     background:#fff;transition:all 0.18s;cursor:pointer;"
-              onclick="selectPubMode('auto')">
-              <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
-                <span style="font-size:1.2rem;">⚡</span>
-                <span style="font-size:0.92rem;font-weight:800;color:var(--text-dark);">Automatic Publishing</span>
-              </div>
-              <div style="font-size:0.82rem;color:var(--text-muted);line-height:1.55;padding-left:30px;">
-                News is published automatically without manual review.
-                Email will contain a <strong>link</strong> to the hosted PDF (no attachment).
-              </div>
-            </div>
-          </label>
-
-          <!-- Manual -->
-          <label style="cursor:pointer;display:block;">
-            <input type="radio" name="publish_mode" value="manual"
-              {{ 'checked' if (settings.publish_mode or 'manual') == 'manual' else '' }}
-              style="display:none;" class="pub-radio" onchange="updatePublishUI()">
-            <div class="pub-option {{ 'pub-selected' if (settings.publish_mode or 'manual') == 'manual' else '' }}"
-              style="padding:16px 18px;border-radius:14px;border:1px solid var(--border);
-                     background:#fff;transition:all 0.18s;cursor:pointer;"
-              onclick="selectPubMode('manual')">
-              <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
-                <span style="font-size:1.2rem;">👤</span>
-                <span style="font-size:0.92rem;font-weight:800;color:var(--text-dark);">Manual Publishing</span>
-              </div>
-              <div style="font-size:0.82rem;color:var(--text-muted);line-height:1.55;padding-left:30px;">
-                You review and select articles before publishing.
-                Email will have PDFs <strong>attached</strong>.
-              </div>
-            </div>
-          </label>
-
-          <!-- Email behaviour note (auto) -->
-          <div id="auto-email-note" style="display:{{ 'flex' if (settings.publish_mode or 'manual') == 'auto' else 'none' }};
-               margin-top:14px;gap:10px;padding:12px 14px;background:#eef5ff;
-               border:1px solid #cadcff;border-radius:10px;color:#2350b8;font-size:0.82rem;">
-            <span>📧</span>
-            <span>In Auto mode, the email will include a <strong>View PDF</strong> link pointing to your hosted page instead of attaching the file.</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- ── CARD 3: Content Filter ── -->
-      <div class="table-card" style="overflow:visible;">
-        <div class="table-card-header">
-          <div>
-            <div class="table-card-title">📂 Content Categories</div>
-            <div class="table-card-subtitle">Which news categories should be shown and published?</div>
-          </div>
-        </div>
-        <div style="padding:24px;">
-
-          <div style="font-size:0.78rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:12px;">
-            Select Categories
-          </div>
-
-          {% set categories = [
-            ('all',         '🌐', 'All News',          'Every article regardless of category'),
-            ('agricultural','🌾', 'Agricultural News',  'Farming, crops, fertilizers, agri markets'),
-            ('weather',     '⛅', 'Weather News',       'Climate, monsoon, temperature updates'),
-            ('financial',   '📈', 'Financial News',     'Markets, stocks, economy, commodities'),
-            ('energy',      '⚡', 'Energy News',        'Oil, gas, power, renewables'),
+          <!-- All 5 category rows: All News first, then 4 specific -->
+          {% set all_cat_defs = [
+            ('all',          '🌐', 'All News',           'Every article regardless of category'),
+            ('agricultural', '🌾', 'Agricultural News',  'Farming, crops, fertilizers, agri markets'),
+            ('weather',      '⛅', 'Weather News',        'Climate, monsoon, temperature updates'),
+            ('financial',    '📈', 'Financial News',      'Markets, stocks, economy, commodities'),
+            ('energy',       '⚡', 'Energy News',         'Oil, gas, power, renewables'),
           ] %}
 
           {% set active_cats = (settings.content_categories or 'all').split(',') %}
 
-          <div style="display:flex;flex-direction:column;gap:8px;" id="cat-list">
-            {% for val, icon, label, desc in categories %}
-            <label style="cursor:pointer;display:flex;align-items:center;gap:12px;
-                          padding:12px 14px;border-radius:12px;border:1px solid var(--border);
-                          background:#fff;transition:all 0.15s;"
-                   class="cat-label {{ 'cat-selected' if val in active_cats else '' }}"
-                   id="cat-label-{{ val }}">
-              <input type="checkbox" name="content_categories" value="{{ val }}"
-                {{ 'checked' if val in active_cats else '' }}
-                class="cat-checkbox" data-val="{{ val }}"
-                style="width:16px;height:16px;accent-color:var(--navy);"
-                onchange="handleCatChange('{{ val }}')">
-              <span style="font-size:1.1rem;">{{ icon }}</span>
-              <div>
-                <div style="font-size:0.88rem;font-weight:700;color:var(--text-dark);">{{ label }}</div>
-                <div style="font-size:0.76rem;color:var(--text-muted);margin-top:1px;">{{ desc }}</div>
+          <div style="display:flex;flex-direction:column;gap:10px;">
+            {% for cat_key, cat_icon, cat_label, cat_desc in all_cat_defs %}
+            {%- set cat_sched = settings.get('schedule_' + cat_key) or {} -%}
+            {%- set is_active = cat_key in active_cats -%}
+
+            <div id="catcard-{{ cat_key }}"
+                 style="border-radius:12px;
+                        border:1px solid {{ 'var(--navy)' if is_active else 'var(--border)' }};
+                        background:{{ '#f6f9ff' if is_active else '#fff' }};
+                        transition:all 0.18s;overflow:visible;">
+
+              <div style="display:flex;align-items:center;gap:12px;padding:13px 16px;cursor:pointer;"
+                   onclick="toggleCatExpand('{{ cat_key }}',this)">
+
+                <input type="checkbox" name="content_categories" value="{{ cat_key }}"
+                  {{ 'checked' if is_active else '' }}
+                  class="cat-checkbox" data-val="{{ cat_key }}"
+                  style="width:15px;height:15px;accent-color:var(--navy);flex-shrink:0;"
+                  onclick="event.stopPropagation()"
+                  onchange="handleCatChange('{{ cat_key }}')">
+
+                <span style="font-size:1rem;flex-shrink:0;">{{ cat_icon }}</span>
+
+                <div style="flex:1;min-width:0;">
+                  <div style="font-size:0.87rem;font-weight:700;color:var(--text-dark);">{{ cat_label }}</div>
+                  <div style="font-size:0.73rem;color:var(--text-muted);margin-top:1px;white-space:nowrap;
+                              overflow:hidden;text-overflow:ellipsis;">{{ cat_desc }}</div>
+                </div>
+
+                <span id="badge-{{ cat_key }}"
+                      style="font-size:0.7rem;padding:3px 8px;border-radius:20px;white-space:nowrap;
+                             background:{{ '#e0e9ff' if is_active else '#f0f2f7' }};
+                             color:{{ 'var(--navy)' if is_active else 'var(--text-muted)' }};
+                             font-weight:700;flex-shrink:0;">
+                  {{ _schedule_summary(cat_sched) }}
+                </span>
+
+                <span id="chevron-{{ cat_key }}"
+                      style="font-size:0.72rem;color:var(--text-muted);
+                             transition:transform 0.2s;flex-shrink:0;">▼</span>
               </div>
-            </label>
+
+              <!-- Expandable schedule panel -->
+              <div id="catpanel-{{ cat_key }}"
+                   style="display:none;padding:0 16px 16px;">
+                <div style="border-top:1px solid var(--border);padding-top:12px;">
+                  {{ _render_schedule_inline(cat_key, cat_sched) }}
+                </div>
+              </div>
+
+            </div>
+
+            {# Visual separator after All News row #}
+            {% if cat_key == 'all' %}
+            <div style="height:1px;background:var(--border);margin:2px 0;"></div>
+            {% endif %}
+
             {% endfor %}
           </div>
-        </div>
-      </div>
 
-      <!-- ── CARD 4: Email Preferences ── -->
-      <div class="table-card" style="overflow:visible;">
-        <div class="table-card-header">
-          <div>
-            <div class="table-card-title">📧 Email Preferences</div>
-            <div class="table-card-subtitle">Who receives the daily news digest?</div>
-          </div>
-        </div>
-        <div style="padding:24px;display:flex;flex-direction:column;gap:18px;">
-
-          <div>
-            <label style="font-size:0.78rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;display:block;margin-bottom:6px;">
-              Primary Recipient
-            </label>
-            <input type="email" name="email_recipient" value="{{ settings.email_recipient or 'niyati.b@seamlessautomations.com' }}"
-              style="width:100%;padding:11px 14px;border:1px solid #dce4f5;border-radius:10px;font-size:0.9rem;outline:none;color:var(--text-dark);">
-          </div>
-
-          <div>
-            <label style="font-size:0.78rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;display:block;margin-bottom:6px;">
-              CC Recipients <span style="font-weight:500;opacity:0.7;">(comma-separated)</span>
-            </label>
-            <input type="text" name="email_cc" value="{{ settings.email_cc or '' }}"
-              placeholder="e.g. manager@company.com, team@company.com"
-              style="width:100%;padding:11px 14px;border:1px solid #dce4f5;border-radius:10px;font-size:0.9rem;outline:none;color:var(--text-dark);">
-          </div>
-
-          <div>
-            <label style="font-size:0.78rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;display:block;margin-bottom:6px;">
-              Email Subject Prefix
-            </label>
-            <input type="text" name="email_subject_prefix" value="{{ settings.email_subject_prefix or 'Daily News Alert' }}"
-              style="width:100%;padding:11px 14px;border:1px solid #dce4f5;border-radius:10px;font-size:0.9rem;outline:none;color:var(--text-dark);">
-          </div>
-
-          <div style="padding:14px;background:#f8f9fc;border-radius:12px;border:1px solid var(--border);">
-            <div style="display:flex;align-items:center;justify-content:space-between;">
-              <div>
-                <div style="font-size:0.88rem;font-weight:700;color:var(--text-dark);">Send Email on Publish</div>
-                <div style="font-size:0.76rem;color:var(--text-muted);margin-top:2px;">Automatically send email when articles are published</div>
+          <!-- How it works -->
+          <div style="margin-top:20px;padding:15px 16px;background:#f8f9fc;
+                      border-radius:11px;border:1px solid var(--border);">
+            <div style="font-size:0.73rem;font-weight:700;color:var(--text-muted);
+                        text-transform:uppercase;letter-spacing:0.06em;margin-bottom:12px;">
+              How it works
+            </div>
+            <div style="display:flex;flex-direction:column;gap:9px;">
+              <div style="display:flex;gap:10px;align-items:flex-start;">
+                <span style="font-size:0.82rem;font-weight:800;color:var(--navy);
+                             background:#e0e9ff;border-radius:50%;width:20px;height:20px;
+                             display:flex;align-items:center;justify-content:center;flex-shrink:0;
+                             margin-top:1px;">1</span>
+                <span style="font-size:0.82rem;color:var(--text-muted);line-height:1.5;">
+                  <strong style="color:var(--text-dark);">Select categories</strong> — tick one or more news types, or choose <em>All News</em> to capture everything. News is matched using built-in keyword sets per category.
+                </span>
               </div>
-              <label class="toggle-switch">
-                <input type="checkbox" name="email_on_publish" value="1"
-                  {{ 'checked' if settings.email_on_publish else 'checked' }}>
-                <span class="toggle-slider"></span>
-              </label>
+              <div style="display:flex;gap:10px;align-items:flex-start;">
+                <span style="font-size:0.82rem;font-weight:800;color:var(--navy);
+                             background:#e0e9ff;border-radius:50%;width:20px;height:20px;
+                             display:flex;align-items:center;justify-content:center;flex-shrink:0;
+                             margin-top:1px;">2</span>
+                <span style="font-size:0.82rem;color:var(--text-muted);line-height:1.5;">
+                  <strong style="color:var(--text-dark);">Set a schedule</strong> — click the <em>▼</em> arrow on any row to configure its timing. Choose Interval (e.g. every 2 hours), Daily (fixed time), or Weekly (day + time).
+                </span>
+              </div>
+              <div style="display:flex;gap:10px;align-items:flex-start;">
+                <span style="font-size:0.82rem;font-weight:800;color:var(--navy);
+                             background:#e0e9ff;border-radius:50%;width:20px;height:20px;
+                             display:flex;align-items:center;justify-content:center;flex-shrink:0;
+                             margin-top:1px;">3</span>
+                <span style="font-size:0.82rem;color:var(--text-muted);line-height:1.5;">
+                  <strong style="color:var(--text-dark);">Run all together</strong> — enable <em>Run All Together</em> to override per-category schedules and run every active category on one shared global schedule.
+                </span>
+              </div>
             </div>
           </div>
 
         </div>
-      </div>
+      </div><!-- /left card -->
 
-    </div>
 
-    <!-- Save button -->
+      <!-- ══ RIGHT · Publishing Mode + Email ══ -->
+      <div style="display:flex;flex-direction:column;gap:20px;">
+
+        <div class="table-card" style="overflow:visible;">
+          <div class="table-card-header">
+            <div>
+              <div class="table-card-title">📤 Publishing Mode</div>
+              <div class="table-card-subtitle">How should articles be published?</div>
+            </div>
+          </div>
+          <div style="padding:20px;">
+
+            <label style="cursor:pointer;display:block;margin-bottom:10px;">
+              <input type="radio" name="publish_mode" value="auto"
+                {{ 'checked' if (settings.publish_mode or 'manual') == 'auto' else '' }}
+                style="display:none;" class="pub-radio" onchange="updatePublishUI()">
+              <div class="pub-option {{ 'pub-selected' if (settings.publish_mode or 'manual') == 'auto' else '' }}"
+                style="padding:14px 16px;border-radius:12px;border:1px solid var(--border);
+                       background:#fff;transition:all 0.18s;cursor:pointer;"
+                onclick="selectPubMode('auto')">
+                <div style="display:flex;align-items:center;gap:9px;margin-bottom:5px;">
+                  <span style="font-size:1.1rem;">⚡</span>
+                  <span style="font-size:0.9rem;font-weight:800;color:var(--text-dark);">Automatic</span>
+                </div>
+                <div style="font-size:0.79rem;color:var(--text-muted);line-height:1.5;padding-left:28px;">
+                  Scraped articles are published instantly. Email contains a <strong>link</strong> to the PDF.
+                </div>
+              </div>
+            </label>
+
+            <label style="cursor:pointer;display:block;">
+              <input type="radio" name="publish_mode" value="manual"
+                {{ 'checked' if (settings.publish_mode or 'manual') == 'manual' else '' }}
+                style="display:none;" class="pub-radio" onchange="updatePublishUI()">
+              <div class="pub-option {{ 'pub-selected' if (settings.publish_mode or 'manual') == 'manual' else '' }}"
+                style="padding:14px 16px;border-radius:12px;border:1px solid var(--border);
+                       background:#fff;transition:all 0.18s;cursor:pointer;"
+                onclick="selectPubMode('manual')">
+                <div style="display:flex;align-items:center;gap:9px;margin-bottom:5px;">
+                  <span style="font-size:1.1rem;">👤</span>
+                  <span style="font-size:0.9rem;font-weight:800;color:var(--text-dark);">Manual</span>
+                </div>
+                <div style="font-size:0.79rem;color:var(--text-muted);line-height:1.5;padding-left:28px;">
+                  Scraped articles wait in Non-Published News for your review. PDFs are <strong>attached</strong> to emails.
+                </div>
+              </div>
+            </label>
+
+            <div id="auto-email-note"
+                 style="display:{{ 'flex' if (settings.publish_mode or 'manual') == 'auto' else 'none' }};
+                        margin-top:12px;gap:9px;padding:10px 13px;background:#eef5ff;
+                        border:1px solid #cadcff;border-radius:9px;color:#2350b8;font-size:0.79rem;">
+              <span>📧</span>
+              <span>Email will include a <strong>View PDF</strong> link instead of an attachment.</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="table-card" style="overflow:visible;">
+          <div class="table-card-header">
+            <div>
+              <div class="table-card-title">📧 Email Preferences</div>
+              <div class="table-card-subtitle">Who receives the daily digest?</div>
+            </div>
+          </div>
+          <div style="padding:20px;display:flex;flex-direction:column;gap:14px;">
+
+            <div>
+              <label style="font-size:0.73rem;font-weight:700;color:var(--text-muted);
+                            text-transform:uppercase;letter-spacing:0.06em;display:block;margin-bottom:5px;">
+                Primary Recipient
+              </label>
+              <input type="email" name="email_recipient"
+                value="{{ settings.email_recipient or 'niyati.b@seamlessautomations.com' }}"
+                style="width:100%;box-sizing:border-box;padding:10px 13px;border:1px solid #dce4f5;
+                       border-radius:9px;font-size:0.87rem;outline:none;color:var(--text-dark);">
+            </div>
+
+            <div>
+              <label style="font-size:0.73rem;font-weight:700;color:var(--text-muted);
+                            text-transform:uppercase;letter-spacing:0.06em;display:block;margin-bottom:5px;">
+                CC <span style="font-weight:500;opacity:0.7;">(comma-separated)</span>
+              </label>
+              <input type="text" name="email_cc" value="{{ settings.email_cc or '' }}"
+                placeholder="manager@company.com, team@company.com"
+                style="width:100%;box-sizing:border-box;padding:10px 13px;border:1px solid #dce4f5;
+                       border-radius:9px;font-size:0.87rem;outline:none;color:var(--text-dark);">
+            </div>
+
+            <div>
+              <label style="font-size:0.73rem;font-weight:700;color:var(--text-muted);
+                            text-transform:uppercase;letter-spacing:0.06em;display:block;margin-bottom:5px;">
+                Subject Prefix
+              </label>
+              <input type="text" name="email_subject_prefix"
+                value="{{ settings.email_subject_prefix or 'Daily News Alert' }}"
+                style="width:100%;box-sizing:border-box;padding:10px 13px;border:1px solid #dce4f5;
+                       border-radius:9px;font-size:0.87rem;outline:none;color:var(--text-dark);">
+            </div>
+
+            <div style="padding:12px 14px;background:#f8f9fc;border-radius:10px;border:1px solid var(--border);">
+              <div style="display:flex;align-items:center;justify-content:space-between;">
+                <div>
+                  <div style="font-size:0.86rem;font-weight:700;color:var(--text-dark);">Send on Publish</div>
+                  <div style="font-size:0.73rem;color:var(--text-muted);margin-top:2px;">Auto-send when articles are published</div>
+                </div>
+                <label class="toggle-switch">
+                  <input type="checkbox" name="email_on_publish" value="1"
+                    {{ 'checked' if settings.email_on_publish else 'checked' }}>
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+      </div><!-- /right column -->
+    </div><!-- /grid -->
+
     <div style="margin-top:24px;display:flex;justify-content:flex-end;gap:12px;">
       <a href="{{ url_for('main.home') }}" class="btn btn-ghost" style="padding:11px 24px;">Cancel</a>
       <button type="submit" class="btn btn-primary" style="padding:11px 28px;font-size:0.95rem;">
@@ -261,108 +411,114 @@
   </form>
 </div>
 
+
 <style>
-/* Toggle switch */
-.toggle-switch {
-  position: relative;
-  display: inline-block;
-  width: 46px;
-  height: 26px;
-  flex-shrink: 0;
-}
-.toggle-switch input { opacity: 0; width: 0; height: 0; }
-.toggle-slider {
-  position: absolute;
-  cursor: pointer;
-  inset: 0;
-  background: #d1d5db;
-  border-radius: 999px;
-  transition: 0.22s;
-}
-.toggle-slider::before {
-  content: "";
-  position: absolute;
-  width: 20px;
-  height: 20px;
-  left: 3px;
-  bottom: 3px;
-  background: #fff;
-  border-radius: 50%;
-  transition: 0.22s;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.18);
-}
-.toggle-switch input:checked + .toggle-slider { background: var(--navy); }
-.toggle-switch input:checked + .toggle-slider::before { transform: translateX(20px); }
-
-/* Frequency option selected state */
-.freq-selected {
-  background: var(--navy) !important;
-  color: #fff !important;
-  border-color: var(--navy) !important;
-}
-
-/* Publishing mode selected */
-.pub-selected {
-  border-color: var(--navy) !important;
-  background: #f0f4fb !important;
-  box-shadow: 0 0 0 2px rgba(26,42,108,0.12);
-}
-
-/* Category selected */
-.cat-selected {
-  border-color: var(--navy) !important;
-  background: #f0f4fb !important;
-}
+.toggle-switch{position:relative;display:inline-block;width:46px;height:26px;flex-shrink:0;}
+.toggle-switch input{opacity:0;width:0;height:0;}
+.toggle-slider{position:absolute;cursor:pointer;inset:0;background:#d1d5db;border-radius:999px;transition:.22s;}
+.toggle-slider::before{content:"";position:absolute;width:20px;height:20px;left:3px;bottom:3px;
+  background:#fff;border-radius:50%;transition:.22s;box-shadow:0 1px 4px rgba(0,0,0,.18);}
+.toggle-switch input:checked+.toggle-slider{background:var(--navy);}
+.toggle-switch input:checked+.toggle-slider::before{transform:translateX(20px);}
+.pub-selected{border-color:var(--navy)!important;background:#f0f4fb!important;
+  box-shadow:0 0 0 2px rgba(26,42,108,.10);}
+.stype-active{background:var(--navy)!important;color:#fff!important;border-color:var(--navy)!important;}
+.chevron-open{transform:rotate(180deg);}
 </style>
 
 <script>
-// ── Frequency picker ──────────────────────────────────────────
-function selectFreq(val) {
-  document.querySelectorAll('.freq-radio').forEach(r => r.checked = r.value === val);
-  document.querySelectorAll('.freq-option').forEach(el => el.classList.remove('freq-selected'));
-  event.currentTarget.classList.add('freq-selected');
-  toggleCustomFreq();
-}
-function toggleCustomFreq() {
-  const selected = document.querySelector('.freq-radio:checked');
-  document.getElementById('custom-freq-box').style.display =
-    selected && selected.value === 'custom' ? 'block' : 'none';
+function toggleSyncMode(){
+  const on = document.getElementById('syncAllToggle').checked;
+  document.getElementById('globalScheduleBox').style.display = on ? 'block' : 'none';
 }
 
-// ── Publishing mode picker ────────────────────────────────────
-function selectPubMode(val) {
+function toggleCatExpand(catKey){
+  const panel   = document.getElementById('catpanel-' + catKey);
+  const chevron = document.getElementById('chevron-' + catKey);
+  const open    = panel.style.display !== 'none';
+  panel.style.display = open ? 'none' : 'block';
+  chevron.classList.toggle('chevron-open', !open);
+}
+
+function handleCatChange(val){
+  const cb = document.querySelector(`.cat-checkbox[data-val="${val}"]`);
+  if(val === 'all' && cb.checked){
+    document.querySelectorAll('.cat-checkbox').forEach(c => {
+      if(c.dataset.val !== 'all'){ c.checked = false; updateCatCard(c.dataset.val, false); }
+    });
+  } else if(val !== 'all' && cb.checked){
+    const allCb = document.querySelector('.cat-checkbox[data-val="all"]');
+    if(allCb){ allCb.checked = false; updateCatCard('all', false); }
+  }
+  updateCatCard(val, cb.checked);
+}
+
+function updateCatCard(val, active){
+  const card  = document.getElementById('catcard-' + val);
+  const badge = document.getElementById('badge-'   + val);
+  if(!card) return;
+  card.style.borderColor = active ? 'var(--navy)' : 'var(--border)';
+  card.style.background  = active ? '#f6f9ff'     : '#fff';
+  if(badge){
+    badge.style.background = active ? '#e0e9ff' : '#f0f2f7';
+    badge.style.color      = active ? 'var(--navy)' : 'var(--text-muted)';
+  }
+}
+
+function setSchedType(catKey, type){
+  document.getElementById('sched-type-hidden-' + catKey).value = type;
+  ['interval','daily','weekly'].forEach(t => {
+    const el = document.getElementById('sched-' + t + '-' + catKey);
+    if(el) el.style.display = t === type ? 'flex' : 'none';
+  });
+  document.querySelectorAll(`.stype-btn[data-cat="${catKey}"]`).forEach(btn => {
+    const active = btn.dataset.type === type;
+    btn.style.background  = active ? 'var(--navy)' : '#f8f9fc';
+    btn.style.color       = active ? '#fff' : 'var(--text-muted)';
+    btn.style.borderColor = active ? 'var(--navy)' : 'var(--border)';
+  });
+  updateBadge(catKey);
+}
+
+function updateBadge(catKey){
+  const badge = document.getElementById('badge-' + catKey);
+  if(!badge) return;
+  const type = document.getElementById('sched-type-hidden-' + catKey)?.value || 'interval';
+  let text = '';
+  if(type === 'interval'){
+    const n = document.querySelector(`input[name="sched_${catKey}_interval_hours"]`)?.value || '1';
+    const u = document.querySelector(`select[name="sched_${catKey}_interval_unit"]`)?.value || 'hours';
+    text = `Every ${n} ${u}`;
+  } else if(type === 'daily'){
+    const t = document.querySelector(`input[name="sched_${catKey}_time"]`)?.value || '08:00';
+    text = `Daily @ ${t}`;
+  } else if(type === 'weekly'){
+    const d = document.querySelector(`select[name="sched_${catKey}_weekly_day"]`)?.value || 'monday';
+    const t = document.querySelector(`input[name="sched_${catKey}_weekly_time"]`)?.value || '08:00';
+    text = `${d.charAt(0).toUpperCase()+d.slice(1)} @ ${t}`;
+  }
+  badge.textContent = text;
+}
+
+document.addEventListener('DOMContentLoaded', function(){
+  ['all','agricultural','weather','financial','energy','global'].forEach(cat => {
+    document.querySelectorAll(`[name^="sched_${cat}_"]`).forEach(el => {
+      el.addEventListener('change', () => updateBadge(cat));
+      el.addEventListener('input',  () => updateBadge(cat));
+    });
+  });
+});
+
+function selectPubMode(val){
   document.querySelectorAll('.pub-radio').forEach(r => r.checked = r.value === val);
   document.querySelectorAll('.pub-option').forEach(el => el.classList.remove('pub-selected'));
   event.currentTarget.classList.add('pub-selected');
   updatePublishUI();
 }
-function updatePublishUI() {
+function updatePublishUI(){
   const r = document.querySelector('.pub-radio:checked');
   document.getElementById('auto-email-note').style.display =
     r && r.value === 'auto' ? 'flex' : 'none';
-}
-
-// ── Category "All News" logic ─────────────────────────────────
-function handleCatChange(val) {
-  const cb = document.querySelector(`.cat-checkbox[data-val="${val}"]`);
-  if (val === 'all' && cb.checked) {
-    // Uncheck all others when "All" selected
-    document.querySelectorAll('.cat-checkbox').forEach(c => {
-      if (c.dataset.val !== 'all') { c.checked = false; updateCatLabel(c.dataset.val, false); }
-    });
-  } else if (val !== 'all' && cb.checked) {
-    // Uncheck "All" if specific category selected
-    const allCb = document.querySelector('.cat-checkbox[data-val="all"]');
-    if (allCb) { allCb.checked = false; updateCatLabel('all', false); }
-  }
-  updateCatLabel(val, cb.checked);
-}
-function updateCatLabel(val, checked) {
-  const lbl = document.getElementById('cat-label-' + val);
-  if (lbl) {
-    if (checked) lbl.classList.add('cat-selected');
-    else         lbl.classList.remove('cat-selected');
-  }
 }
 </script>
 {% endblock %}

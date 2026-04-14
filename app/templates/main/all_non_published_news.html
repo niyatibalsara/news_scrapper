@@ -26,7 +26,7 @@
 
   .col-check{width:42px;text-align:center} .col-sr{width:52px}
   .col-date{width:96px}  .col-type{width:100px}  .col-headline{width:170px}
-  .col-text{width:235px} .col-url{width:170px}   .col-keywords{width:140px}
+  .col-text{width:235px} .col-url{width:170px}   .col-keywords{width:155px}
   .col-insert{width:148px}
 
   .headline-text { font-size:.84rem; font-weight:700; color:var(--text-dark); line-height:1.5; word-break:break-word; }
@@ -46,6 +46,26 @@
 
   .news-url-link { font-size:.81rem; font-weight:600; color:var(--blue-accent); word-break:break-all; line-height:1.5; }
   .muted-text { color:var(--text-muted); }
+
+  /* Keyword pills — each keyword its own pill, wraps naturally */
+  .kw-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    align-items: flex-start;
+  }
+  .kw-pill {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: #d4f5e2;
+    border: 1px solid #7dd4a8;
+    color: #145a32;
+    font-size: 0.70rem;
+    font-weight: 600;
+    white-space: nowrap;
+    line-height: 1.6;
+  }
 
   .bulk-bar {
     display:flex; align-items:center; gap:12px; padding:10px 16px;
@@ -228,14 +248,24 @@
                        class="news-url-link">{{ article.news_url }}</a>
                   {% else %}<span class="muted-text">—</span>{% endif %}
                 </td>
+
+                {# ── Keywords: individual pill per keyword ── #}
                 <td class="col-keywords">
                   {% if article.keywords %}
-                    <span class="badge badge-active"
-                          style="font-size:.71rem;display:inline-block;white-space:normal;line-height:1.4;">
-                      {{ article.keywords }}
-                    </span>
-                  {% else %}<span class="muted-text">—</span>{% endif %}
+                    {% set kw_list = article.keywords.split(',') %}
+                    <div class="kw-pills">
+                      {% for kw in kw_list %}
+                        {% set k = kw.strip() %}
+                        {% if k %}
+                          <span class="kw-pill">{{ k }}</span>
+                        {% endif %}
+                      {% endfor %}
+                    </div>
+                  {% else %}
+                    <span class="muted-text">—</span>
+                  {% endif %}
                 </td>
+
                 <td class="col-insert" style="font-size:.81rem;color:var(--text-muted);white-space:nowrap;">
                   {{ article.date_of_insert.strftime('%Y-%m-%d %H:%M') if article.date_of_insert else '—' }}
                 </td>
@@ -298,8 +328,8 @@
   'use strict';
 
   /* ── Checkboxes ── */
-  var topCb   = document.getElementById('selectAll');
-  var headCb  = document.getElementById('selectAllHead');
+  var topCb    = document.getElementById('selectAll');
+  var headCb   = document.getElementById('selectAllHead');
   var selCount = document.getElementById('selCount');
 
   function syncAll(v){
@@ -331,7 +361,7 @@
     });
   });
 
-  /* ── Read More (IntersectionObserver — zero layout thrash on load) ── */
+  /* ── Read More ── */
   function initReadMore(wrap){
     var content = wrap.querySelector('.news-text-content');
     var btn     = wrap.querySelector('.read-more-btn');
@@ -359,11 +389,7 @@
     }, 400);
   }
 
-  /* ── Scraper status polling ──
-     Polls every 4 s ONLY when scraper is running.
-     Single initial check on page load.
-     Reloads page (page=1) when scraper finishes so new articles appear.
-  ── */
+  /* ── Scraper status polling ── */
   var banner     = document.getElementById('scraperBanner');
   var bannerMsg  = document.getElementById('scraperMsg');
   var refreshBtn = document.getElementById('refreshBtn');
@@ -376,8 +402,8 @@
     else       { banner.classList.remove('active'); }
     if(msg && bannerMsg) bannerMsg.textContent = msg;
     if(refreshBtn){
-      refreshBtn.disabled     = active;
-      refreshBtn.textContent  = active ? '⏳ Running…' : '🔄 Refresh News';
+      refreshBtn.disabled    = active;
+      refreshBtn.textContent = active ? '⏳ Running…' : '🔄 Refresh News';
     }
   }
 
@@ -393,7 +419,6 @@
           if(pollHandle){ clearTimeout(pollHandle); pollHandle=null; }
           setBanner(false);
           if(knownRunning){
-            // Was running — now done. Reload to show new articles.
             knownRunning = false;
             window.location.href = '{{ url_for("main.all_non_published_news", page=1) }}';
           }
@@ -406,7 +431,6 @@
     setBanner(true);
     pollHandle = setTimeout(poll, 4000);
   } else {
-    // Single silent check
     fetch(STATUS_URL)
       .then(function(r){ return r.json(); })
       .then(function(d){
