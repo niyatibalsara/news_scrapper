@@ -1082,6 +1082,8 @@ from .auth import login_required
 from app.db import get_db
 
 import os
+import json
+import requests
 import smtplib
 import threading
 import traceback
@@ -1128,6 +1130,57 @@ def _get_db_cfg() -> dict:
         "database": cfg["MYSQL_DB"],
     }
 
+def get_weather_overview(temp, humidity, wind, desc):
+    wind_status = "Breezy" if wind > 5.0 else "Calm"
+    precip_status = "Rain likely" if "rain" in desc.lower() else "Dry"
+
+    impacts = (
+        "Hazardous for spraying or sensitive tasks."
+        if wind > 5.0 or "rain" in desc.lower()
+        else "Ideal for field work."
+    )
+
+    overview = (
+        f"* ADVISORY: {desc.upper()} in effect.\n"
+        f"* WHAT: Temp {temp}°C with {humidity}% humidity.\n"
+        f"* WIND: {wind_status} ({wind} m/s).\n"
+        f"* IMPACTS: {precip_status} conditions. {impacts}"
+    )
+    return overview
+
+# Agri and Weather Data
+@main_bp.route("/agri-dashboard")
+@login_required
+def agri_dashboard():
+    # 1. Fetch Live Weather (Thane)
+    # Get free key from openweathermap.org
+    weather_api_key = "2baab2dc7ad18ffef8b81c014e893e1c" 
+    weather_url = f"https://api.openweathermap.org/data/2.5/weather?q=Thane&units=metric&appid={weather_api_key}"
+    
+    weather_data = {"temp": "--", "desc": "Offline", "location": "Thane", "humidity": "--"}
+    try:
+        w_res = requests.get(weather_url, timeout=3).json()
+        if w_res.get("main"):
+            weather_data = {
+                "temp": round(w_res['main']['temp']),
+                "desc": w_res['weather'][0]['description'].capitalize(),
+                "location": w_res['name'],
+                "humidity": w_res['main']['humidity']
+            }
+    except:
+        pass
+
+    # 2. Agricultural Commodity Prices
+    # These can be pulled from your DB or a Scraper later
+    commodities = [
+        {"name": "Onion", "price": "2,450", "unit": "Quintal", "trend": "up"},
+        {"name": "Cotton", "price": "7,100", "unit": "Quintal", "trend": "down"},
+        {"name": "Sugarcane", "price": "315", "unit": "Ton", "trend": "up"}
+    ]
+
+    return render_template("main/agri_dashboard.html", 
+                           weather=weather_data, 
+                           commodities=commodities)
 
 # ================================================================
 #  Background: PDF generation + email
@@ -1353,36 +1406,535 @@ def _bg_scraper(db_cfg: dict, instance_path: str):
 def index():
     return render_template("main/landing.html")
 
+# for agriculture trends
+def to_float(value):
+    try:
+        if value in (None, "", "N/A", "-"):
+            return None
+        return float(str(value).replace(",", "").replace("₹", "").strip())
+    except Exception:
+        return None
+
+# for agriculture trends
+def get_recent_months(year_str, month_str, count=6):
+    months = []
+    year_num = int(year_str)
+    month_num = int(month_str)
+
+    for _ in range(count):
+        months.append((year_num, month_num))
+        month_num -= 1
+        if month_num == 0:
+            month_num = 12
+            year_num -= 1
+
+    months.reverse()
+    return months
+
+# for agriculture trends
+def build_sparkline_points(values, width=220, height=52, padding=6):
+    clean_values = [v for v in values if v is not None]
+
+    if not clean_values:
+        return {
+            "line_points": "",
+            "fill_points": "",
+        }
+
+    if len(values) == 1:
+        values = [values[0], values[0]]
+
+    min_val = min(clean_values)
+    max_val = max(clean_values)
+
+    if min_val == max_val:
+        max_val = min_val + 1
+
+    usable_width = width - (padding * 2)
+    usable_height = height - (padding * 2)
+    step_x = usable_width / (len(values) - 1) if len(values) > 1 else usable_width
+
+    points = []
+    for idx, value in enumerate(values):
+        if value is None:
+            value = clean_values[-1]
+
+        x = padding + (idx * step_x)
+        y = padding + (max_val - value) / (max_val - min_val) * usable_height
+        points.append((round(x, 2), round(y, 2)))
+
+    line_points = " ".join(f"{x},{y}" for x, y in points)
+    base_y = height - padding
+    fill_points = f"{points[0][0]},{base_y} " + line_points + f" {points[-1][0]},{base_y}"
+
+    return {
+        "line_points": line_points,
+        "fill_points": fill_points,
+    }
+
+def fetch_month_average_for_crop(crop_id, year_num, month_num, agmark_headers, month_names):
+    try:
+        url = "https://api.agmarknet.gov.in/v1/price-trend/wholesale-prices-monthly"
+        params = {
+            "report_mode": "Statewise",
+            "commodity": crop_id,
+            "year": str(year_num),
+            "month": str(month_num),
+            "state": "0",
+            "district": "0",
+            "export": "false",
+        }
+
+        resp = requests.get(url, params=params, headers=agmark_headers, timeout=15)
+        resp.raise_for_status()
+        data = resp.json()
+
+        rows = data.get("rows", []) if isinstance(data, dict) else []
+        price_key = f"prices_{month_names[int(month_num)]}_{int(year_num)}"
+
+        values = []
+        for row in rows:
+            price_val = to_float(row.get(price_key))
+            if price_val is not None:
+                values.append(price_val)
+
+        if not values:
+            return None
+
+        return sum(values) / len(values)
+
+    except Exception as e:
+        print(f"Month average fetch error for crop_id={crop_id}, {month_num}/{year_num}: {e}")
+        return None
 
 @main_bp.route("/home")
 @login_required
 def home():
-    db = get_db()
-    cursor = db.cursor(dictionary=True)
-    today = date.today()
-    pub = unpub = 0
+    api_key = "2baab2dc7ad18ffef8b81c014e893e1c"
+
+    # 1. PARAMETER CAPTURE
+    search_query = request.args.get("city_search", "").strip()
+
+    current_year = datetime.now().year
+    current_month = datetime.now().month
+
+    selected_id = request.args.get("cmdt_id", "").strip()
+    selected_year = request.args.get("year", str(current_year)).strip()
+    selected_month = request.args.get("month", str(current_month)).strip()
+
+    year_options = [str(current_year - 2), str(current_year - 1), str(current_year)]
+
+    month_names = {
+        1: "january",
+        2: "february",
+        3: "march",
+        4: "april",
+        5: "may",
+        6: "june",
+        7: "july",
+        8: "august",
+        9: "september",
+        10: "october",
+        11: "november",
+        12: "december",
+    }
+
+    month_short = {
+        "1": "Jan",
+        "2": "Feb",
+        "3": "Mar",
+        "4": "Apr",
+        "5": "May",
+        "6": "Jun",
+        "7": "Jul",
+        "8": "Aug",
+        "9": "Sep",
+        "10": "Oct",
+        "11": "Nov",
+        "12": "Dec",
+    }
+
+    def get_previous_month_year(month_str, year_str):
+        month_num = int(month_str)
+        year_num = int(year_str)
+        if month_num == 1:
+            return 12, year_num - 1
+        return month_num - 1, year_num
+
+    agmark_headers = {
+        "accept": "application/json, text/plain, */*",
+        "accept-language": "en-US,en;q=0.8",
+        "origin": "https://www.agmarknet.gov.in",
+        "referer": "https://www.agmarknet.gov.in/",
+        "user-agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/146.0.0.0 Safari/537.36"
+        ),
+    }
+
+    # 2. WEATHER LOGIC (ONLY SEARCHED CITY)
+    weather_card = {
+        "location": "Search City",
+        "temp": "--",
+        "desc": "Waiting for input",
+        "icon": "01d",
+        "humidity": "--",
+        "wind": "--",
+        "overview": "Enter a city name to see weather advisories."
+    }
+
+    if search_query:
+        try:
+            geo_url = (
+                f"https://api.openweathermap.org/geo/1.0/direct"
+                f"?q={search_query}&limit=1&appid={api_key}"
+            )
+            geo_resp = requests.get(geo_url, timeout=5).json()
+
+            if geo_resp:
+                lat = geo_resp[0]["lat"]
+                lon = geo_resp[0]["lon"]
+                resolved_city = geo_resp[0].get("name", search_query)
+
+                w_url = (
+                    f"https://api.openweathermap.org/data/2.5/weather"
+                    f"?lat={lat}&lon={lon}&units=metric&appid={api_key}"
+                )
+                w_resp = requests.get(w_url, timeout=5).json()
+
+                if w_resp.get("main"):
+                    weather_desc = w_resp["weather"][0]["description"].title()
+                    temp = round(w_resp["main"]["temp"])
+                    hum = w_resp["main"]["humidity"]
+                    wind = w_resp["wind"]["speed"]
+
+                    weather_card.update({
+                        "location": resolved_city,
+                        "temp": temp,
+                        "desc": weather_desc,
+                        "icon": w_resp["weather"][0]["icon"],
+                        "humidity": hum,
+                        "wind": wind,
+                        "overview": get_weather_overview(temp, hum, wind, weather_desc)
+                    })
+                else:
+                    weather_card.update({
+                        "location": search_query,
+                        "desc": "Weather unavailable",
+                        "overview": "Weather data could not be fetched for this city right now."
+                    })
+            else:
+                weather_card.update({
+                    "location": search_query,
+                    "desc": "City not found",
+                    "overview": "No matching city was found. Please check the spelling and try again."
+                })
+
+        except Exception as e:
+            print(f"Weather Error for {search_query}: {e}")
+            weather_card.update({
+                "location": search_query or "Search City",
+                "desc": "Weather unavailable",
+                "overview": "Something went wrong while fetching weather data."
+            })
+
+    # 3. COMMODITY DROPDOWN LOGIC (FROM AGMARKNET API)
+    all_options = []
     try:
-        cursor.execute(
-            "SELECT COUNT(*) AS cnt FROM published_news WHERE DATE(published_at)=%s",
-            (today,),
-        )
-        pub = cursor.fetchone()["cnt"]
+        commodity_url = "https://api.agmarknet.gov.in/v1/dashboard-commodities-filter"
+        commodity_resp = requests.get(commodity_url, headers=agmark_headers, timeout=20)
+        commodity_resp.raise_for_status()
 
-        cursor.execute(
-            "SELECT COUNT(*) AS cnt FROM non_published_news WHERE published=0"
-        )
-        unpub = cursor.fetchone()["cnt"]
+        commodity_payload = commodity_resp.json()
+
+        if isinstance(commodity_payload, dict):
+            raw_commodities = (
+                commodity_payload.get("data")
+                or commodity_payload.get("rows")
+                or commodity_payload.get("result")
+                or commodity_payload.get("commodities")
+                or []
+            )
+        elif isinstance(commodity_payload, list):
+            raw_commodities = commodity_payload
+        else:
+            raw_commodities = []
+
+        seen_ids = set()
+        normalized_options = []
+
+        for item in raw_commodities:
+            if not isinstance(item, dict):
+                continue
+
+            item_id = (
+                item.get("id")
+                or item.get("commodity_id")
+                or item.get("value")
+                or item.get("commodity")
+            )
+            item_name = (
+                item.get("cmdt_name")
+                or item.get("commodity_name")
+                or item.get("name")
+                or item.get("label")
+                or item.get("commodity")
+            )
+
+            if item_id in (None, "") or not item_name:
+                continue
+
+            item_id = str(item_id).strip()
+            item_name = str(item_name).strip()
+
+            if item_id not in seen_ids:
+                seen_ids.add(item_id)
+                normalized_options.append({
+                    "id": item_id,
+                    "cmdt_name": item_name,
+                })
+
+        all_options = sorted(normalized_options, key=lambda x: x["cmdt_name"].lower())
+        print(f"DEBUG: Loaded {len(all_options)} commodities from Agmarknet API.")
+
     except Exception as e:
-        print(f"[HOME] count error: {e}")
-    finally:
-        cursor.close()
+        print(f"Commodity API Load Error: {e}")
 
+    featured_cards = []
+
+    def to_float(value):
+        try:
+            if value in (None, "", "N/A", "-"):
+                return None
+            return float(str(value).replace(",", "").replace("₹", "").strip())
+        except Exception:
+            return None
+
+    def build_featured_card(crop_name, crop_id):
+        try:
+            recent_months = get_recent_months(selected_year, selected_month, count=6)
+
+            history_values = []
+            for year_num, month_num in recent_months:
+                avg_price = fetch_month_average_for_crop(
+                    crop_id=crop_id,
+                    year_num=year_num,
+                    month_num=month_num,
+                    agmark_headers=agmark_headers,
+                    month_names=month_names,
+                )
+                history_values.append(avg_price)
+
+            usable_values = [v for v in history_values if v is not None]
+            if not usable_values:
+                return None
+
+            for i in range(len(history_values)):
+                if history_values[i] is None:
+                    history_values[i] = usable_values[0] if i == 0 else history_values[i - 1]
+
+            current_price = history_values[-1]
+            previous_price = history_values[-2] if len(history_values) > 1 else history_values[-1]
+
+            if previous_price and previous_price != 0:
+                percent_change = ((current_price - previous_price) / previous_price) * 100
+            else:
+                percent_change = 0
+
+            sparkline = build_sparkline_points(history_values)
+
+            return {
+                "name": crop_name,
+                "price": f"{current_price:,.2f}",
+                "change": f"{abs(percent_change):.2f}",
+                "signed_change": round(percent_change, 2),
+                "is_positive": percent_change >= 0,
+                "line_points": sparkline["line_points"],
+                "fill_points": sparkline["fill_points"],
+            }
+
+        except Exception as e:
+            print(f"Featured card error for {crop_name}: {e}")
+            return None
+
+    featured_crop_names = [
+        "Rice",
+        "Wheat",
+        "Maize",
+        "Soyabean",
+        "Cotton",
+        "Groundnut",
+        "Onion",
+        "Sugarcane",
+    ]
+
+    featured_lookup = {item["cmdt_name"].strip().lower(): item["id"] for item in all_options}
+
+    for crop in featured_crop_names:
+        crop_id = featured_lookup.get(crop.lower())
+        if crop_id:
+            card = build_featured_card(crop, crop_id)
+            if card:
+                featured_cards.append(card)
+
+    # 4. COMMODITY PRICE API LOGIC
+    state_data = []
+    cmdt_title = ""
+    current_price_label = ""
+    previous_price_label = ""    
+    commodity_summary = {
+        "commodity_name": "",
+        "avg_price": "N/A",
+        "highest_price": "N/A",
+        "highest_state": "-",
+        "lowest_price": "N/A",
+        "lowest_state": "-",
+        "avg_change": "N/A",
+    }
+
+    if selected_id:
+        try:
+            current_month_num = int(selected_month)
+            current_year_num = int(selected_year)
+
+            prev_month_num, prev_year_num = get_previous_month_year(selected_month, selected_year)
+
+            current_price_key = f"prices_{month_names[current_month_num]}_{current_year_num}"
+            previous_price_key = f"prices_{month_names[prev_month_num]}_{prev_year_num}"
+
+            current_price_label = f"{month_short[str(current_month_num)]} {current_year_num}"
+            previous_price_label = f"{month_short[str(prev_month_num)]} {prev_year_num}"
+
+            url = "https://api.agmarknet.gov.in/v1/price-trend/wholesale-prices-monthly"
+            params = {
+                "report_mode": "Statewise",
+                "commodity": selected_id,
+                "year": selected_year,
+                "month": selected_month,
+                "state": "0",
+                "district": "0",
+                "export": "false",
+            }
+
+            resp = requests.get(url, params=params, headers=agmark_headers, timeout=20)
+            resp.raise_for_status()
+            data = resp.json()
+
+            raw_rows = data.get("rows", []) if isinstance(data, dict) else []
+            cmdt_title = data.get("title", "Price Analysis") if isinstance(data, dict) else "Price Analysis"
+
+            if not cmdt_title:
+                selected_item = next(
+                    (item for item in all_options if item["id"] == selected_id),
+                    None
+                )
+                cmdt_title = selected_item["cmdt_name"] if selected_item else "Price Analysis"
+
+            normalized_rows = []
+            for row in raw_rows:
+                if not isinstance(row, dict):
+                    continue
+
+                normalized_rows.append({
+                    "state": row.get("state", ""),
+                    "current_price": row.get(current_price_key, "N/A"),
+                    "previous_price": row.get(previous_price_key, "N/A"),
+                    "change_over_previous_month": row.get("change_over_previous_month", 0),
+                })
+
+            state_data = normalized_rows
+
+            def to_float(value):
+                try:
+                    if value in (None, "", "N/A", "-"):
+                        return None
+                    return float(str(value).replace(",", "").replace("₹", "").strip())
+                except Exception:
+                    return None
+
+            if state_data:
+                price_rows = []
+                change_values = []
+
+                for row in state_data:
+                    curr_price = to_float(row.get("current_price"))
+                    change_val = to_float(row.get("change_over_previous_month"))
+
+                    if curr_price is not None:
+                        price_rows.append({
+                            "state": row.get("state", "-"),
+                            "price": curr_price
+                        })
+
+                    if change_val is not None:
+                        change_values.append(change_val)
+
+                if price_rows:
+                    avg_price = sum(item["price"] for item in price_rows) / len(price_rows)
+                    highest_item = max(price_rows, key=lambda x: x["price"])
+                    lowest_item = min(price_rows, key=lambda x: x["price"])
+
+                    commodity_summary.update({
+                        "commodity_name": cmdt_title,
+                        "avg_price": f"{avg_price:,.2f}",
+                        "highest_price": f"{highest_item['price']:,.2f}",
+                        "highest_state": highest_item["state"],
+                        "lowest_price": f"{lowest_item['price']:,.2f}",
+                        "lowest_state": lowest_item["state"],
+                    })
+
+                if change_values:
+                    avg_change = sum(change_values) / len(change_values)
+                    commodity_summary["avg_change"] = f"{avg_change:.1f}"
+            print(f"DEBUG: Received {len(state_data)} rows from Agmarknet")
+
+        except Exception as e:
+            print(f"Agmarknet API Error: {e}")
+
+
+    # 5. DATABASE LOGIC (PENDING NEWS)
+    pending_count = 0
+    recent_news = []
+
+    try:
+        db = get_db()
+        cursor = db.cursor(dictionary=True)
+
+        cursor.execute("SELECT COUNT(*) AS count FROM non_published_news")
+        pending_count = cursor.fetchone()["count"]
+
+        cursor.execute("SELECT * FROM non_published_news ORDER BY id DESC LIMIT 5")
+        recent_news = cursor.fetchall()
+
+    except Exception as e:
+        print(f"Database Error: {e}")
+
+    finally:
+        try:
+            cursor.close()
+        except Exception:
+            pass
+
+    # 6. RENDER TEMPLATE
     return render_template(
         "main/home.html",
-        today_published_count=pub,
-        today_unpublished_count=unpub,
+        weather_card=weather_card,
+        search_query=search_query,
+        all_options=all_options,
+        state_data=state_data,
+        table_title=cmdt_title,
+        selected_id=selected_id,
+        selected_year=selected_year,
+        selected_month=selected_month,
+        year_options=year_options,
+        current_price_label=current_price_label,
+        previous_price_label=previous_price_label,
+        pending_count=pending_count,
+        recent_news=recent_news,
+        commodity_summary=commodity_summary,
+        featured_cards=featured_cards
     )
-
 
 # ── Keywords ──────────────────────────────────────────────────
 @main_bp.route("/view-keywords", methods=["GET", "POST"])
