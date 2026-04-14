@@ -1,0 +1,45 @@
+# ── app/__init__.py  (add these lines to your existing create_app) ──
+#
+# Find your existing create_app() function and add the two lines
+# marked with  <<<  below.  Everything else is your existing code.
+#
+# Example:
+#
+#   from flask import Flask
+#   from app.main import main_bp, init_scheduler      # <<< add init_scheduler here
+#
+#   def create_app(config=None):
+#       app = Flask(__name__)
+#       app.config.from_object(...)   # your existing config
+#
+#       # register blueprints
+#       app.register_blueprint(main_bp)
+#
+#       # START THE BACKGROUND SCHEDULER  <<<
+#       init_scheduler(app)            # <<< add this line
+#
+#       return app
+#
+# ── run.py / wsgi.py ────────────────────────────────────────────
+#
+# If you run Flask with the built-in dev server, use --no-reload
+# so the scheduler thread is not duplicated:
+#
+#   flask run --no-reload
+#
+# OR keep the reloader and it will still work because init_scheduler
+# checks the WERKZEUG_RUN_MAIN environment variable automatically.
+#
+# For production (gunicorn example):
+#
+#   gunicorn "app:create_app()" --workers 1 --threads 4 --bind 0.0.0.0:5000
+#
+# Use --workers 1 so the scheduler runs in exactly one process.
+# ────────────────────────────────────────────────────────────────
+
+# ── Install Playwright (run once in your virtualenv) ─────────────
+#
+#   pip install playwright
+#   playwright install chromium
+#
+# That's all — pdf_generator.py handles everything else automatically.

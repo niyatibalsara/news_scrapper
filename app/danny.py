@@ -3,6 +3,8 @@ import json
 import re
 from crawl4ai import AsyncWebCrawler, CrawlerRunConfig, BrowserConfig, CacheMode
 from crawl4ai.extraction_strategy import JsonCssExtractionStrategy
+
+#required update crawl4ai to latest version to run this code
  
 async def get_latest_news(crawler, site_config):
     """Fetches all raw news items from a site's latest news page."""

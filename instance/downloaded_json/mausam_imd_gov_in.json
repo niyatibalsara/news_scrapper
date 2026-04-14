@@ -1,106 +1,142 @@
 [
   {
     "headline": "मंत्री पृथ्वी विज्ञान मंत्रालय",
-    "url": "https://mausam.imd.gov.in/responsive/people_minister_moes.php"
+    "url": "https://mausam.imd.gov.in/responsive/people_minister_moes.php",
+    "description": ""
   },
   {
     "headline": "सचिव पृथ्वी विज्ञान मंत्रालय",
-    "url": "https://mausam.imd.gov.in/responsive/people_secretory_moes.php"
+    "url": "https://mausam.imd.gov.in/responsive/people_secretory_moes.php",
+    "description": ""
   },
   {
     "headline": "महानिदेशक भारत मौसम विज्ञान वि.",
-    "url": "https://mausam.imd.gov.in/responsive/people_dgm.php"
+    "url": "https://mausam.imd.gov.in/responsive/people_dgm.php",
+    "description": ""
   },
   {
     "headline": "भा.मौ.वि.वि. वार्षिक रिपोर्ट 2022",
-    "url": "https://mausam.imd.gov.in/imd_latest/contents/ar2022.pdf"
+    "url": "https://mausam.imd.gov.in/imd_latest/contents/ar2022.pdf",
+    "description": ""
   },
   {
     "headline": "विद्युत प्रणाली संचालन के लिए मौसम",
-    "url": "https://mausam.imd.gov.in/imd_latest/contents/pdf/IMDposoco.pdf"
+    "url": "https://mausam.imd.gov.in/imd_latest/contents/pdf/IMDposoco.pdf",
+    "description": ""
   },
   {
     "headline": "मौसम पूर्वानुमान और चेतावनी सेवाएं",
-    "url": "https://mausam.imd.gov.in/imd_latest/contents/pdf/forecasting_sop.pdf"
+    "url": "https://mausam.imd.gov.in/imd_latest/contents/pdf/forecasting_sop.pdf",
+    "description": ""
   },
   {
     "headline": "हाइड्रोमीटियोलॉजिकल सेवाएं",
-    "url": "https://mausam.imd.gov.in/imd_latest/contents/pdf/hydrology_sop.pdf"
+    "url": "https://mausam.imd.gov.in/imd_latest/contents/pdf/hydrology_sop.pdf",
+    "description": ""
   },
   {
     "headline": "हाइड्रोमीटियोलॉजिकल सेवाएं भा.मौ.वि.वि. में",
-    "url": "https://mausam.imd.gov.in/responsive/servicesHydrological.php"
+    "url": "https://mausam.imd.gov.in/responsive/servicesHydrological.php",
+    "description": ""
   },
   {
     "headline": "भारत में कृषि के लिए मौसम सेवाएं",
-    "url": "https://mausam.imd.gov.in/responsive/servicesMetAgriculture.php"
+    "url": "https://mausam.imd.gov.in/responsive/servicesMetAgriculture.php",
+    "description": ""
   },
   {
     "headline": "भारत में नागरिक विमानन के लिए मौसम सेवाएं",
-    "url": "https://mausam.imd.gov.in/responsive/servicesMetCivilAviation.php"
+    "url": "https://mausam.imd.gov.in/responsive/servicesMetCivilAviation.php",
+    "description": ""
   },
   {
     "headline": "उपग्रह मौसम विज्ञान सेवाएं",
-    "url": "https://mausam.imd.gov.in/responsive/servicesSatMet.php"
+    "url": "https://mausam.imd.gov.in/responsive/servicesSatMet.php",
+    "description": ""
   },
   {
     "headline": "भा.मौ.वि.वि. रडार नेटवर्क",
-    "url": "https://mausam.imd.gov.in/responsive/servicesDwrNetwork.php"
+    "url": "https://mausam.imd.gov.in/responsive/servicesDwrNetwork.php",
+    "description": ""
   },
   {
     "headline": "ऊपरी वायु मौसम विज्ञान उपकरण",
-    "url": "https://mausam.imd.gov.in/responsive/servicesMetUpperAir.php"
+    "url": "https://mausam.imd.gov.in/responsive/servicesMetUpperAir.php",
+    "description": ""
   },
   {
     "headline": "भा.मौ.वि.वि. मौसम टेलीकम्म्यूनिकेशन",
-    "url": "https://mausam.imd.gov.in/responsive/servicesMetTeleComm.php"
+    "url": "https://mausam.imd.gov.in/responsive/servicesMetTeleComm.php",
+    "description": ""
   },
   {
-    "headline": "प्रेस विज्ञप्ति 10.04.2026: अगले एक सप्ताह के दौरान उत्तर-पश्चिम, मध्य और पूर्वी भारत में मौसम में कोई खास बदलाव की संभावना नहीं है।",
-    "url": "https://mausam.imd.gov.in/Forecast/marquee_data/ विज्ञप्ति 10.04.2026_1775808800.pdf"
+    "headline": "2026 के दक्षिण-पश्चिम मॉनसून ऋतु की वर्षा के लिए दीर्घावधि पूर्वानुमान",
+    "url": "https://mausam.imd.gov.in/Forecast/marquee_data/ विज्ञप्ति LRF_1776081992.pdf",
+    "description": ""
   },
   {
-    "headline": "Press Release Dated: 10th April 2026 No significant weather likely over northwest, central & East India during next one week.",
-    "url": "https://mausam.imd.gov.in/Forecast/marquee_data/Press Release 10-04-2026_1775808588.pdf"
+    "headline": "2026 केदक्षऺण-ऩप्चिभ भॉनसन ू ऋतु की िर्षा के लरए दीघषािधध ऩि ू षानभ ु षन",
+    "url": "https://mausam.imd.gov.in/Forecast/marquee_data/ विज्ञप्ति LRF.pdf",
+    "description": ""
   },
   {
-    "headline": "Current Weather Status and Extended Range Forecast for the next two weeks (09 to 22 April 2026)",
-    "url": "https://mausam.imd.gov.in/Forecast/marquee_data/ERF 09.04.26.pdf"
+    "headline": "Press release for LRF for southwest Monsoon",
+    "url": "https://mausam.imd.gov.in/Forecast/marquee_data/Long Range Forecast for Southwest Monsoon Season Rainfall_Press_release_13.4.2026.pdf",
+    "description": ""
+  },
+  {
+    "headline": "प्रेस विज्ञप्ति 13.04.2026:अगले एक सप्ताह के दौरान उत्तर-पश्चिम, मध्य और पूर्वी भारत में मौसम में कोई खास बदलाव की संभावना नहीं है।",
+    "url": "https://mausam.imd.gov.in/Forecast/marquee_data/ विज्ञप्ति 13.04.2026.pdf",
+    "description": ""
+  },
+  {
+    "headline": "Subject: Press Conference on “Long Range Forecast of Southwest Monsoon 2026” at Mahika Hall, Ministry of Earth Sciences, New Delhi on 13th April 2026 at 1600HRS",
+    "url": "https://mausam.imd.gov.in/Forecast/marquee_data/Press Release-Media.pdf",
+    "description": ""
   },
   {
     "headline": "गर्म मौसम की ऋतु (अप्रैल से जून) 2026 के लिए अद्यतन/अपडेट ऋतुनिष्ठ आउटलुक तथा अप्रैल 2026 के लिए वर्षा और तापमान का मासिक आउटलुक",
-    "url": "https://mausam.imd.gov.in/Forecast/marquee_data/.वि. 31.03.26.pdf"
+    "url": "https://mausam.imd.gov.in/Forecast/marquee_data/.वि. 31.03.26.pdf",
+    "description": ""
   },
   {
     "headline": "Updated Seasonal outlook for hot weather season (April to June) 2026 and Monthly Outlook for April 2026 for the Rainfall and Temperature",
-    "url": "https://mausam.imd.gov.in/Forecast/marquee_data/Press Release_AMJ2026_31_March_2026.pdf"
+    "url": "https://mausam.imd.gov.in/Forecast/marquee_data/Press Release_AMJ2026_31_March_2026.pdf",
+    "description": ""
   },
   {
     "headline": "एपीआई और सोशल मीडिया के माध्यम से आईएमडी द्वारा दी गयी चेतावनीयां",
-    "url": "https://mausam.imd.gov.in/Forecast/marquee_data/API_doc.pdf"
+    "url": "https://mausam.imd.gov.in/Forecast/marquee_data/API_doc.pdf",
+    "description": ""
   },
   {
     "headline": "मात्रात्मक वर्षा का पूर्वानुमान",
-    "url": "https://mausam.imd.gov.in/responsive/quantPrecipForecast.php"
+    "url": "https://mausam.imd.gov.in/responsive/quantPrecipForecast.php",
+    "description": ""
   },
   {
     "headline": "अखिल भारतीय मौसम पूर्वानुमान बुलेटिन",
-    "url": "https://mausam.imd.gov.in/responsive/all_india_forcast_bulletin.php"
+    "url": "https://mausam.imd.gov.in/responsive/all_india_forcast_bulletin.php",
+    "description": ""
   },
   {
     "headline": "5 दिवसीय उपखंडीय वर्षा पूर्वानुमान",
-    "url": "https://mausam.imd.gov.in/responsive/5d_subdivisional_rf.php"
+    "url": "https://mausam.imd.gov.in/responsive/5d_subdivisional_rf.php",
+    "description": ""
   },
   {
     "headline": "5 दिवसीय जिलावार वर्षा पूर्वानुमान",
-    "url": "https://mausam.imd.gov.in/responsive/5d_statewisedistricts_rf_forecast.php"
+    "url": "https://mausam.imd.gov.in/responsive/5d_statewisedistricts_rf_forecast.php",
+    "description": ""
   },
   {
     "headline": "दीर्घकालीन मॉडल दिशानिर्देश",
-    "url": "https://mausam.imd.gov.in/responsive/extendedRangeForecast.php"
+    "url": "https://mausam.imd.gov.in/responsive/extendedRangeForecast.php",
+    "description": ""
   },
   {
     "headline": "अक्सर पूछे जाने वाले प्रश्न",
-    "url": "https://mausam.imd.gov.in/responsive/faq.php"
+    "url": "https://mausam.imd.gov.in/responsive/faq.php",
+    "description": ""
   }
 ]

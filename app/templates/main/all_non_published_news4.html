@@ -1,0 +1,419 @@
+{% extends 'base.html' %}
+{% block title %}All Non-Published News — Seamless{% endblock %}
+
+{% block content %}
+<style>
+  .table-controls { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+  .table-controls form { margin:0!important; }
+  .tbl-search {
+    display:flex; align-items:center; gap:10px;
+    background:#f6f8fc; border:1px solid #d9e3f2;
+    border-radius:14px; padding:0 14px; min-height:42px;
+  }
+  .tbl-search input {
+    border:none; outline:none; background:transparent;
+    font-size:.88rem; color:var(--text-dark); width:200px;
+  }
+
+  .news-table { width:100%; border-collapse:collapse; table-layout:fixed; }
+  .news-table thead tr { background:#f0f4fb; }
+  .news-table th {
+    padding:11px 12px; border:1px solid #dce6f5; text-align:left;
+    font-size:.69rem; font-weight:800; text-transform:uppercase;
+    letter-spacing:.07em; color:var(--text-muted); white-space:nowrap;
+  }
+  .news-table td { padding:12px 12px; vertical-align:top; border:1px solid #e8eef8; }
+
+  .col-check{width:42px;text-align:center} .col-sr{width:52px}
+  .col-date{width:96px}  .col-type{width:100px}  .col-headline{width:170px}
+  .col-text{width:235px} .col-url{width:170px}   .col-keywords{width:140px}
+  .col-insert{width:148px}
+
+  .headline-text { font-size:.84rem; font-weight:700; color:var(--text-dark); line-height:1.5; word-break:break-word; }
+
+  /* Read More */
+  .news-text-wrap { display:flex; flex-direction:column; align-items:flex-start; gap:5px; }
+  .news-text-content {
+    font-size:.81rem; color:var(--text-muted); line-height:1.6; word-break:break-word;
+    overflow:hidden; display:-webkit-box; -webkit-line-clamp:4; -webkit-box-orient:vertical;
+  }
+  .news-text-content.expanded { display:block; overflow:visible; }
+  .read-more-btn {
+    display:none; padding:0; border:none; background:none;
+    color:var(--blue-accent); font-size:.78rem; font-weight:700; cursor:pointer;
+  }
+  .read-more-btn:hover { text-decoration:underline; }
+
+  .news-url-link { font-size:.81rem; font-weight:600; color:var(--blue-accent); word-break:break-all; line-height:1.5; }
+  .muted-text { color:var(--text-muted); }
+
+  .bulk-bar {
+    display:flex; align-items:center; gap:12px; padding:10px 16px;
+    border-bottom:1px solid var(--border); background:#f8f9fc; flex-wrap:wrap;
+  }
+  .select-all-label { display:flex; align-items:center; gap:7px; cursor:pointer; }
+  .theme-checkbox { width:15px; height:15px; accent-color:var(--navy); flex-shrink:0; }
+  .selection-text { font-size:.84rem; font-weight:700; color:var(--text-muted); }
+  .selected-count { margin-left:auto; font-size:.81rem; color:var(--text-muted); font-weight:600; }
+  .news-row { transition:background .1s; }
+  .news-row:hover { background:#f4f7fd; }
+
+  /* Scraper banner */
+  #scraperBanner {
+    display:none; align-items:center; gap:14px;
+    padding:14px 18px; border-radius:14px;
+    background:#eef5ff; border:1px solid #cadcff;
+    color:#2350b8; font-size:.91rem; font-weight:600; margin-bottom:20px;
+  }
+  #scraperBanner.active { display:flex; }
+  .spin {
+    width:18px; height:18px; border:3px solid #cadcff;
+    border-top-color:#2350b8; border-radius:50%;
+    animation:spin .75s linear infinite; flex-shrink:0;
+  }
+  @keyframes spin { to { transform:rotate(360deg); } }
+
+  /* Pagination */
+  .pagination {
+    display:flex; align-items:center; gap:6px;
+    padding:14px 16px; border-top:1px solid var(--border);
+    background:#f8f9fc; flex-wrap:wrap;
+  }
+  .page-btn {
+    display:inline-flex; align-items:center; justify-content:center;
+    min-width:34px; height:34px; padding:0 10px;
+    border:1px solid #d9e3f2; border-radius:8px;
+    font-size:.82rem; font-weight:600; color:var(--text-muted);
+    background:#fff; text-decoration:none; cursor:pointer;
+    transition:all .15s;
+  }
+  .page-btn:hover { border-color:#2350b8; color:#2350b8; background:#eef5ff; }
+  .page-btn.active { background:#1a2a6c; color:#fff; border-color:#1a2a6c; pointer-events:none; }
+  .page-btn.disabled { opacity:.4; pointer-events:none; cursor:default; }
+  .page-info { font-size:.82rem; color:var(--text-muted); margin-left:auto; }
+
+  @media(max-width:1200px){ .news-table{ table-layout:auto; } }
+</style>
+
+<div class="page-container">
+  <div class="page-head">
+    <div class="breadcrumb-row">
+      <a href="{{ url_for('main.home') }}">Dashboard</a>
+      <span class="sep">›</span><span>News Processing</span>
+      <span class="sep">›</span><span>All Non-Published News</span>
+    </div>
+    <h1>All Non-Published News</h1>
+    <p>Manage all non-published news details.</p>
+  </div>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px;">
+        {% for cat, msg in messages %}
+          {% if cat == 'success' %}
+            <div style="display:flex;align-items:center;gap:12px;padding:14px 18px;border-radius:14px;background:#eefaf3;border:1px solid #c9ecd7;color:#17623c;font-size:.91rem;font-weight:600;">✅ {{ msg }}</div>
+          {% elif cat == 'danger' %}
+            <div style="display:flex;align-items:center;gap:12px;padding:14px 18px;border-radius:14px;background:#fff1f1;border:1px solid #f7c9c9;color:#9f1f1f;font-size:.91rem;font-weight:600;">❌ {{ msg }}</div>
+          {% elif cat == 'warning' %}
+            <div style="display:flex;align-items:center;gap:12px;padding:14px 18px;border-radius:14px;background:#fff8e8;border:1px solid #f3dfab;color:#97630a;font-size:.91rem;font-weight:600;">⚠️ {{ msg }}</div>
+          {% else %}
+            <div style="display:flex;align-items:center;gap:12px;padding:14px 18px;border-radius:14px;background:#eef5ff;border:1px solid #cadcff;color:#2350b8;font-size:.91rem;font-weight:600;">ℹ️ {{ msg }}</div>
+          {% endif %}
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <!-- Scraper running banner -->
+  <div id="scraperBanner" {% if scrape_running %}class="active"{% endif %}>
+    <div class="spin"></div>
+    <span id="scraperMsg">Scraper is running in the background — fetching latest news. Page will refresh automatically when done.</span>
+  </div>
+
+  <div class="table-card">
+    <div class="table-card-header">
+      <div>
+        <div class="table-card-title">Non-Published News</div>
+        <div class="table-card-subtitle">
+          {{ total }} article(s) pending — showing page {{ page }} of {{ total_pages }}
+        </div>
+      </div>
+      <div class="table-controls">
+        <!-- Refresh form -->
+        <form method="POST" action="{{ url_for('main.refresh_news') }}">
+          <button type="submit" id="refreshBtn" class="btn btn-primary"
+                  style="padding:7px 18px;font-size:.85rem;"
+                  {% if scrape_running %}disabled{% endif %}>
+            {% if scrape_running %}⏳ Running…{% else %}🔄 Refresh News{% endif %}
+          </button>
+        </form>
+        <!-- Search (client-side, current page only) -->
+        <div class="tbl-search">
+          <span>🔍</span>
+          <input id="searchInput" type="text" placeholder="Search this page…">
+        </div>
+      </div>
+    </div>
+
+    <!-- Bulk actions form -->
+    <form method="POST" action="{{ url_for('main.all_non_published_news_actions') }}" id="bulkForm">
+      <div class="bulk-bar">
+        <label class="select-all-label">
+          <input type="checkbox" id="selectAll" class="theme-checkbox">
+          <span class="selection-text">Select All</span>
+        </label>
+        <button type="submit" name="action" value="publish"
+                class="btn btn-primary" style="padding:7px 18px;font-size:.85rem;">
+          ✅ Publish Selected
+        </button>
+        <button type="submit" name="action" value="delete"
+                class="btn btn-danger" style="padding:7px 18px;font-size:.85rem;">
+          🗑 Delete Selected
+        </button>
+        <span id="selCount" class="selected-count">0 selected</span>
+      </div>
+
+      <div style="width:100%;overflow-x:auto;">
+        <table class="news-table">
+          <thead>
+            <tr>
+              <th class="col-check"><input type="checkbox" id="selectAllHead" class="theme-checkbox"></th>
+              <th class="col-sr">Sr. No</th>
+              <th class="col-date">Date</th>
+              <th class="col-type">Type</th>
+              <th class="col-headline">Headline</th>
+              <th class="col-text">News Text</th>
+              <th class="col-url">URL</th>
+              <th class="col-keywords">Keywords</th>
+              <th class="col-insert">Inserted</th>
+            </tr>
+          </thead>
+          <tbody id="newsBody">
+            {% set row_start = (page - 1) * per_page + 1 %}
+            {% if news %}
+              {% for article in news %}
+              <tr class="news-row">
+                <td class="col-check">
+                  <input type="checkbox" name="selected_news"
+                         value="{{ article.id }}" class="row-cb theme-checkbox">
+                </td>
+                <td class="col-sr" style="font-size:.84rem;font-weight:700;color:var(--text-muted);">
+                  {{ row_start + loop.index0 }}
+                </td>
+                <td class="col-date" style="font-size:.84rem;white-space:nowrap;">
+                  {{ article.news_date.strftime('%Y-%m-%d') if article.news_date else '—' }}
+                </td>
+                <td class="col-type">
+                  {% if article.news_type %}
+                    <span class="badge badge-pending"
+                          style="font-size:.71rem;white-space:nowrap;display:inline-block;">
+                      {{ article.news_type }}
+                    </span>
+                  {% else %}<span class="muted-text">—</span>{% endif %}
+                </td>
+                <td class="col-headline">
+                  <span class="headline-text">{{ article.news_headline or '—' }}</span>
+                </td>
+                <td class="col-text">
+                  {% if article.news_text %}
+                    <div class="news-text-wrap" data-len="{{ article.news_text|length }}">
+                      <div class="news-text-content">{{ article.news_text }}</div>
+                      <button type="button" class="read-more-btn">Read More</button>
+                    </div>
+                  {% else %}<span class="muted-text">—</span>{% endif %}
+                </td>
+                <td class="col-url">
+                  {% if article.news_url %}
+                    <a href="{{ article.news_url }}" target="_blank" rel="noopener"
+                       class="news-url-link">{{ article.news_url }}</a>
+                  {% else %}<span class="muted-text">—</span>{% endif %}
+                </td>
+                <td class="col-keywords">
+                  {% if article.keywords %}
+                    <span class="badge badge-active"
+                          style="font-size:.71rem;display:inline-block;white-space:normal;line-height:1.4;">
+                      {{ article.keywords }}
+                    </span>
+                  {% else %}<span class="muted-text">—</span>{% endif %}
+                </td>
+                <td class="col-insert" style="font-size:.81rem;color:var(--text-muted);white-space:nowrap;">
+                  {{ article.date_of_insert.strftime('%Y-%m-%d %H:%M') if article.date_of_insert else '—' }}
+                </td>
+              </tr>
+              {% endfor %}
+            {% else %}
+              <tr>
+                <td colspan="9"
+                    style="padding:60px 24px;text-align:center;color:var(--text-muted);border:1px solid #e8eef8;">
+                  <div style="font-size:2rem;opacity:.3;margin-bottom:10px;">📰</div>
+                  <div style="font-size:.94rem;">No non-published news found.</div>
+                </td>
+              </tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Pagination -->
+      {% if total_pages > 1 %}
+      <div class="pagination">
+        {% if page > 1 %}
+          <a href="{{ url_for('main.all_non_published_news', page=page-1) }}" class="page-btn">‹ Prev</a>
+        {% else %}
+          <span class="page-btn disabled">‹ Prev</span>
+        {% endif %}
+
+        {% for p in range(1, total_pages + 1) %}
+          {% if p == page %}
+            <span class="page-btn active">{{ p }}</span>
+          {% elif p == 1 or p == total_pages or (p >= page - 2 and p <= page + 2) %}
+            <a href="{{ url_for('main.all_non_published_news', page=p) }}" class="page-btn">{{ p }}</a>
+          {% elif p == page - 3 or p == page + 3 %}
+            <span class="page-btn disabled" style="border:none;">…</span>
+          {% endif %}
+        {% endfor %}
+
+        {% if page < total_pages %}
+          <a href="{{ url_for('main.all_non_published_news', page=page+1) }}" class="page-btn">Next ›</a>
+        {% else %}
+          <span class="page-btn disabled">Next ›</span>
+        {% endif %}
+
+        <span class="page-info">
+          Showing {{ (page-1)*per_page + 1 }}–{{ [(page)*per_page, total]|min }} of {{ total }}
+        </span>
+      </div>
+      {% else %}
+      <div class="table-card-footer">
+        <span>Showing <strong>{{ news|length }}</strong> of <strong>{{ total }}</strong> entries</span>
+      </div>
+      {% endif %}
+
+    </form>
+  </div>
+</div>
+
+<script>
+(function(){
+  'use strict';
+
+  /* ── Checkboxes ── */
+  var topCb   = document.getElementById('selectAll');
+  var headCb  = document.getElementById('selectAllHead');
+  var selCount = document.getElementById('selCount');
+
+  function syncAll(v){
+    document.querySelectorAll('.row-cb').forEach(function(c){ c.checked=v; });
+    updateCount();
+  }
+  function updateCount(){
+    var chk = document.querySelectorAll('.row-cb:checked').length;
+    var tot = document.querySelectorAll('.row-cb').length;
+    selCount.textContent = chk + ' selected';
+    [topCb,headCb].forEach(function(cb){
+      if(!cb) return;
+      cb.checked = tot>0 && chk===tot;
+      cb.indeterminate = chk>0 && chk<tot;
+    });
+  }
+  topCb  && topCb.addEventListener('change',  function(){ syncAll(topCb.checked); });
+  headCb && headCb.addEventListener('change', function(){ syncAll(headCb.checked); });
+  document.querySelectorAll('.row-cb').forEach(function(cb){
+    cb.addEventListener('change', updateCount);
+  });
+
+  /* ── Search (current page only) ── */
+  var si = document.getElementById('searchInput');
+  si && si.addEventListener('input', function(){
+    var q = this.value.toLowerCase().trim();
+    document.querySelectorAll('#newsBody .news-row').forEach(function(r){
+      r.style.display = (!q || r.textContent.toLowerCase().includes(q)) ? '' : 'none';
+    });
+  });
+
+  /* ── Read More (IntersectionObserver — zero layout thrash on load) ── */
+  function initReadMore(wrap){
+    var content = wrap.querySelector('.news-text-content');
+    var btn     = wrap.querySelector('.read-more-btn');
+    if(!content || !btn) return;
+    if(parseInt(wrap.dataset.len||'0') <= 280) return;
+    if(content.scrollHeight > content.clientHeight + 2){
+      btn.style.display = 'inline-flex';
+    }
+    btn.addEventListener('click', function(){
+      var exp = content.classList.toggle('expanded');
+      this.textContent = exp ? 'Read Less' : 'Read More';
+    });
+  }
+
+  if('IntersectionObserver' in window){
+    var io = new IntersectionObserver(function(entries, obs){
+      entries.forEach(function(e){
+        if(e.isIntersecting){ initReadMore(e.target); obs.unobserve(e.target); }
+      });
+    }, { rootMargin:'200px' });
+    document.querySelectorAll('.news-text-wrap').forEach(function(w){ io.observe(w); });
+  } else {
+    setTimeout(function(){
+      document.querySelectorAll('.news-text-wrap').forEach(initReadMore);
+    }, 400);
+  }
+
+  /* ── Scraper status polling ──
+     Polls every 4 s ONLY when scraper is running.
+     Single initial check on page load.
+     Reloads page (page=1) when scraper finishes so new articles appear.
+  ── */
+  var banner     = document.getElementById('scraperBanner');
+  var bannerMsg  = document.getElementById('scraperMsg');
+  var refreshBtn = document.getElementById('refreshBtn');
+  var STATUS_URL = '{{ url_for("main.refresh_news_status") }}';
+  var pollHandle = null;
+  var knownRunning = {{ 'true' if scrape_running else 'false' }};
+
+  function setBanner(active, msg){
+    if(active){ banner.classList.add('active'); }
+    else       { banner.classList.remove('active'); }
+    if(msg && bannerMsg) bannerMsg.textContent = msg;
+    if(refreshBtn){
+      refreshBtn.disabled     = active;
+      refreshBtn.textContent  = active ? '⏳ Running…' : '🔄 Refresh News';
+    }
+  }
+
+  function poll(){
+    fetch(STATUS_URL)
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if(d.running){
+          knownRunning = true;
+          setBanner(true, 'Scraper is running in the background — page will refresh when done.');
+          pollHandle = setTimeout(poll, 4000);
+        } else {
+          if(pollHandle){ clearTimeout(pollHandle); pollHandle=null; }
+          setBanner(false);
+          if(knownRunning){
+            // Was running — now done. Reload to show new articles.
+            knownRunning = false;
+            window.location.href = '{{ url_for("main.all_non_published_news", page=1) }}';
+          }
+        }
+      })
+      .catch(function(){ pollHandle = setTimeout(poll, 10000); });
+  }
+
+  if(knownRunning){
+    setBanner(true);
+    pollHandle = setTimeout(poll, 4000);
+  } else {
+    // Single silent check
+    fetch(STATUS_URL)
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if(d.running){ knownRunning=true; setBanner(true); pollHandle=setTimeout(poll,4000); }
+      }).catch(function(){});
+  }
+
+})();
+</script>
+{% endblock %}
