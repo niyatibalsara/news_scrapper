@@ -1,57 +1,31 @@
 {% extends 'base.html' %}
-{% block title %}Home | Seamless News Scraper{% endblock %}
+{% block title %}Dashboard | Seamless News Scraper{% endblock %}
 
 {% block content %}
-
 <style>
   :root {
     --bg: #f5f7fb;
     --panel: #ffffff;
-    --panel-soft: #f8fafc;
     --stroke: #e2e8f0;
     --text: #0f172a;
     --muted: #64748b;
-    --primary: #1e3a8a;
     --primary-soft: #e8eefc;
     --accent: #2563eb;
     --shadow: 0 14px 32px rgba(15, 23, 42, 0.06);
-    --radius-lg: 24px;
     --radius-md: 18px;
     --navy-dark: #111c4e;
   }
 
   .dashboard-shell {
-    padding: 24px 0 0;
-    background:
-      radial-gradient(circle at top left, rgba(37, 99, 235, 0.05), transparent 20%),
-      linear-gradient(180deg, #f8fafc 0%, #f3f6fb 100%);
+    padding: 24px 15px 0;
+    background: radial-gradient(circle at top left, rgba(37, 99, 235, 0.05), transparent 20%);
+    min-height: 100vh;
   }
 
-  .dashboard-stack {
-    display: grid;
-    gap: 24px;
-  }
-
-  .top-grid {
-    display: grid;
-    grid-template-columns: minmax(0, 1.7fr) minmax(320px, 0.8fr);
-    gap: 24px;
-  }
-
-  .summary-panel,
-  .profile-panel,
-  .about-panel,
-  .contact-panel {
-    background: var(--panel);
-    border: 1px solid var(--stroke);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow);
-  }
-
-  .summary-panel {
-    padding: 30px;
-    background: linear-gradient(135deg, #ffffff 0%, #f8fbff 100%);
-    border-top: 4px solid var(--primary);
+  .container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 0 10px;
   }
 
   .section-tag {
@@ -61,486 +35,471 @@
     padding: 8px 14px;
     border-radius: 999px;
     background: var(--primary-soft);
-    color: var(--primary);
+    color: var(--accent);
     font-size: 12px;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.7px;
     margin-bottom: 18px;
   }
 
-  .section-tag::before {
-    content: "";
-    width: 8px;
-    height: 8px;
-    border-radius: 999px;
-    background: var(--accent);
+  .commodity-table tr {
+    transition: background-color 0.2s ease;
   }
 
-  .summary-panel h1 {
-    margin: 0 0 12px;
-    font-size: 40px;
-    line-height: 1.08;
-    letter-spacing: -1px;
-    color: var(--text);
-    font-weight: 800;
+  .commodity-table tr:hover {
+    background-color: #f8fafc;
   }
 
-  .summary-panel h1 span {
-    color: var(--primary);
-  }
-
-  .summary-panel p {
-    margin: 0;
-    max-width: 760px;
-    font-size: 16px;
-    line-height: 1.85;
-    color: var(--muted);
-  }
-
-  .summary-grid {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 16px;
-    margin-top: 24px;
-  }
-
-  .summary-card {
-    background: var(--panel-soft);
-    border: 1px solid var(--stroke);
-    border-radius: var(--radius-md);
-    padding: 18px;
-  }
-
-  .summary-card small {
-    display: block;
-    margin-bottom: 8px;
-    color: var(--muted);
-    font-size: 11px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.8px;
-  }
-
-  .summary-card strong {
-    display: block;
-    font-size: 22px;
-    line-height: 1.2;
-    color: var(--text);
-    font-weight: 800;
-  }
-
-  .summary-card span {
-    display: block;
-    margin-top: 6px;
-    color: var(--muted);
-    font-size: 13px;
-    line-height: 1.6;
-  }
-
-  .profile-panel {
-    padding: 24px;
-    display: grid;
-    align-content: start;
-    gap: 18px;
-  }
-
-  .profile-head {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-  }
-
-  .profile-avatar {
-    width: 58px;
-    height: 58px;
-    border-radius: 18px;
-    background: #dbe7ff;
-    color: var(--primary);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 26px;
-    font-weight: 800;
-    border: 1px solid #c7d7fe;
-  }
-
-  .profile-head span {
-    display: block;
-    margin-bottom: 4px;
-    color: var(--muted);
-    font-size: 12px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.7px;
-  }
-
-  .profile-head strong {
-    display: block;
-    color: var(--text);
-    font-size: 17px;
-    font-weight: 800;
-  }
-
-  .profile-item {
-    background: var(--panel-soft);
-    border: 1px solid var(--stroke);
-    border-radius: 16px;
-    padding: 15px 16px;
-  }
-
-  .profile-item small {
-    display: block;
-    margin-bottom: 6px;
-    color: var(--muted);
-    font-size: 11px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.8px;
-  }
-
-  .profile-item div {
-    color: var(--text);
-    font-size: 15px;
-    font-weight: 700;
-    word-break: break-word;
-  }
-
-  .middle-grid {
-    display: grid;
-    grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.85fr);
-    gap: 24px;
-  }
-
-  .about-panel {
-    padding: 30px;
-  }
-
-  .about-header {
-    margin-bottom: 24px;
-  }
-
-  .about-header h2 {
-    margin: 0 0 12px;
-    font-size: 34px;
-    line-height: 1.15;
-    letter-spacing: -0.8px;
-    color: var(--text);
-    font-weight: 800;
-  }
-
-  .about-header p {
-    margin: 0;
-    max-width: 760px;
-    color: var(--muted);
-    font-size: 16px;
-    line-height: 1.85;
-  }
-
-  .about-feature-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 18px;
-  }
-
-  .feature-card {
-    background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
-    border: 1px solid var(--stroke);
-    border-radius: 20px;
-    padding: 22px;
-    min-height: 220px;
-  }
-
-  .feature-icon {
-    width: 50px;
-    height: 50px;
-    border-radius: 16px;
-    background: var(--primary-soft);
-    color: var(--primary);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 22px;
-    margin-bottom: 16px;
-  }
-
-  .feature-card h3 {
-    margin: 0 0 10px;
-    color: var(--text);
-    font-size: 20px;
-    font-weight: 800;
-  }
-
-  .feature-card p {
-    margin: 0;
-    color: var(--muted);
-    font-size: 14px;
-    line-height: 1.85;
-  }
-
-  .contact-panel {
-    padding: 28px;
-    display: grid;
-    gap: 18px;
-    align-content: start;
-  }
-
-  .contact-panel h3 {
-    margin: 0;
-    color: var(--text);
-    font-size: 28px;
-    font-weight: 800;
-    line-height: 1.2;
-  }
-
-  .contact-intro {
-    margin: -6px 0 4px;
-    color: var(--muted);
-    font-size: 14px;
-    line-height: 1.8;
-  }
-
-  .contact-card {
-    background: var(--panel-soft);
-    border: 1px solid var(--stroke);
-    border-radius: 18px;
-    padding: 18px;
-  }
-
-  .contact-card small {
-    display: block;
-    margin-bottom: 8px;
-    color: var(--muted);
-    font-size: 11px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.8px;
-  }
-
-  .contact-card div {
-    color: var(--text);
-    font-size: 15px;
-    font-weight: 700;
-    line-height: 1.8;
-  }
-
-  /* Footer copied to match landing.html */
   .lp-footer {
     background: var(--navy-dark);
-    padding: 36px 80px;
+    padding: 30px;
     display: flex;
-    align-items: center;
     justify-content: space-between;
-    margin-top: 12px;
+    align-items: center;
+    border-radius: var(--radius-md);
+    margin-top: 40px;
   }
 
   .lp-footer-copy {
     font-size: 13px;
-    color: rgba(255,255,255,.35);
+    color: rgba(255,255,255,0.4);
     margin: 0;
-  }
-
-  .lp-footer-links {
-    display: flex;
-    gap: 20px;
   }
 
   .lp-footer-links a {
     font-size: 13px;
-    color: rgba(255,255,255,.40);
+    color: rgba(255,255,255,0.6);
     text-decoration: none;
-    transition: color .15s;
+    margin-left: 15px;
+  }
+  .featured-cards-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 16px;
+    margin-bottom: 10px;
   }
 
-  .lp-footer-links a:hover {
-    color: rgba(255,255,255,.80);
+  @media (max-width: 1100px) {
+    .featured-cards-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
   }
 
-  @media (max-width: 1080px) {
-    .top-grid,
-    .middle-grid {
+  @media (max-width: 640px) {
+    .featured-cards-grid {
       grid-template-columns: 1fr;
-    }
-  }
-
-  @media (max-width: 768px) {
-    .summary-panel,
-    .profile-panel,
-    .about-panel,
-    .contact-panel {
-      border-radius: 20px;
-    }
-
-    .summary-panel,
-    .about-panel,
-    .contact-panel {
-      padding: 22px;
-    }
-
-    .summary-panel h1 {
-      font-size: 30px;
-    }
-
-    .summary-grid,
-    .about-feature-grid {
-      grid-template-columns: 1fr;
-    }
-
-    .about-header h2 {
-      font-size: 28px;
-    }
-
-    .lp-footer {
-      flex-direction: column;
-      gap: 16px;
-      text-align: center;
-      padding: 28px 24px;
     }
   }
 </style>
 
 <div class="dashboard-shell">
-  <div class="dashboard-stack">
+  <div class="container">
+    {% if featured_cards %}
+    <div style="margin-bottom: 26px;">
+      <div class="section-tag">Featured Agri Markets</div>
 
-    <!-- Top -->
-    <section class="top-grid">
-      <div class="summary-panel">
-        <div class="section-tag">Dashboard Overview</div>
-        <h1>Welcome back, <span>{{ session.get('user_name', 'User') }}</span></h1>
-        <p>
-          This workspace gives you a clean and organized view of the Seamless News
-          Scraper environment. The layout is designed to feel structured and professional,
-          with clearer hierarchy, calmer spacing, and a more refined presentation.
-        </p>
-
-        <div class="summary-grid">
-          <div class="summary-card">
-            <small>Platform</small>
-            <strong>Seamless News Scraper</strong>
-            <span>Centralized dashboard for news workflow visibility and control.</span>
+      <div class="featured-cards-grid">
+        {% for card in featured_cards %}
+        <div style="background:#ffffff; border:1px solid var(--stroke); border-radius:16px; padding:18px; box-shadow:var(--shadow); min-height:140px;">
+          <div style="font-size:14px; font-weight:800; color:var(--text); margin-bottom:6px;">
+            {{ card.name }}
           </div>
 
-          <div class="summary-card">
-            <small>Company</small>
-            <strong>Seamless Automations</strong>
-            <span>Technology-focused solutions for automation and operational efficiency.</span>
+          <div style="font-size:28px; font-weight:800; color:var(--navy-dark); line-height:1.2; margin-bottom:6px;">
+            ₹{{ card.price }}
           </div>
 
-          <div class="summary-card">
-            <small>Status</small>
-            <strong>Operational</strong>
-            <span>System access is available and your session is active.</span>
+          <div style="font-size:13px; font-weight:700; color:{% if card.is_positive %}#166534{% else %}#991b1b{% endif %}; margin-bottom:10px;">
+            {% if card.is_positive %}▲{% else %}▼{% endif %} {{ card.change }}%
           </div>
+
+          <div style="margin-top: 10px; height: 54px; border-radius: 12px; overflow: hidden; background: {% if card.is_positive %}linear-gradient(180deg, rgba(22,163,74,0.08) 0%, rgba(22,163,74,0.02) 100%){% else %}linear-gradient(180deg, rgba(220,38,38,0.08) 0%, rgba(220,38,38,0.02) 100%){% endif %};">
+            <svg viewBox="0 0 220 52" width="100%" height="52" preserveAspectRatio="none">
+              <polygon
+                points="{{ card.fill_points }}"
+                fill="{% if card.is_positive %}rgba(34,197,94,0.16){% else %}rgba(239,68,68,0.16){% endif %}">
+              </polygon>
+
+              <polyline
+                points="{{ card.line_points }}"
+                fill="none"
+                stroke="{% if card.is_positive %}#43a047{% else %}#ef4444{% endif %}"
+                stroke-width="2.2"
+                stroke-linecap="round"
+                stroke-linejoin="round">
+              </polyline>
+            </svg>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    <div style="background: var(--panel); border-radius: var(--radius-md); padding: 25px; box-shadow: var(--shadow); border: 1px solid var(--stroke); margin-bottom: 30px;">
+      <h3 style="margin: 0 0 15px 0; color: var(--navy-dark); font-size: 18px;">Agri Market Intelligence</h3>
+
+      <form action="{{ url_for('main.home') }}" method="GET" style="display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap;">
+        <input type="hidden" name="city_search" value="{{ search_query }}">
+
+        <div style="flex: 2; min-width: 200px;">
+          <label style="display: block; font-size: 11px; font-weight: 700; color: var(--muted); margin-bottom: 5px; text-transform: uppercase;">Commodity</label>
+          <select
+            name="cmdt_id"
+            style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--stroke); background: #f8fafc; font-weight: 600;"
+          >
+            <option value="">-- Choose a Commodity --</option>
+            {% for item in all_options %}
+              <option value="{{ item.id }}" {% if selected_id == item.id|string %}selected{% endif %}>
+                {{ item.cmdt_name|title }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div style="flex: 1; min-width: 100px;">
+          <label style="display: block; font-size: 11px; font-weight: 700; color: var(--muted); margin-bottom: 5px; text-transform: uppercase;">Year</label>
+          <select name="year" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--stroke); background: #f8fafc; font-weight: 600;">
+            {% for y in year_options %}
+              <option value="{{ y }}" {% if selected_year == y %}selected{% endif %}>{{ y }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div style="flex: 1; min-width: 120px;">
+          <label style="display: block; font-size: 11px; font-weight: 700; color: var(--muted); margin-bottom: 5px; text-transform: uppercase;">Month</label>
+          <select name="month" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--stroke); background: #f8fafc; font-weight: 600;">
+            {% set months = [('1','Jan'), ('2','Feb'), ('3','Mar'), ('4','Apr'), ('5','May'), ('6','Jun'), ('7','Jul'), ('8','Aug'), ('9','Sep'), ('10','Oct'), ('11','Nov'), ('12','Dec')] %}
+            {% for val, name in months %}
+              <option value="{{ val }}" {% if selected_month == val %}selected{% endif %}>{{ name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <button type="submit" style="background: var(--accent); color: white; border: none; border-radius: 8px; padding: 10px 20px; font-weight: 800; cursor: pointer; height: 42px;">
+          ANALYZE
+        </button>
+      </form>
+    </div>
+
+    {% if state_data %}
+    <div style="display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:16px; margin-bottom:22px;">
+  <div style="background:linear-gradient(135deg,#2563eb 0%,#1d4ed8 100%); color:#fff; border-radius:16px; padding:20px; box-shadow:var(--shadow);">
+    <div style="font-size:11px; font-weight:700; text-transform:uppercase; opacity:0.85; margin-bottom:8px;">Main Price</div>
+    <div style="font-size:28px; font-weight:800; line-height:1.2;">₹{{ commodity_summary.avg_price }}</div>
+    <div style="font-size:13px; opacity:0.9; margin-top:6px;">Average across states</div>
+  </div>
+
+  <div style="background:#ffffff; border:1px solid var(--stroke); border-radius:16px; padding:20px; box-shadow:var(--shadow);">
+    <div style="font-size:11px; font-weight:700; text-transform:uppercase; color:var(--muted); margin-bottom:8px;">Highest Price</div>
+    <div style="font-size:24px; font-weight:800; color:var(--text); line-height:1.2;">₹{{ commodity_summary.highest_price }}</div>
+    <div style="font-size:13px; color:var(--muted); margin-top:6px;">{{ commodity_summary.highest_state }}</div>
+  </div>
+
+  <div style="background:#ffffff; border:1px solid var(--stroke); border-radius:16px; padding:20px; box-shadow:var(--shadow);">
+    <div style="font-size:11px; font-weight:700; text-transform:uppercase; color:var(--muted); margin-bottom:8px;">Lowest Price</div>
+    <div style="font-size:24px; font-weight:800; color:var(--text); line-height:1.2;">₹{{ commodity_summary.lowest_price }}</div>
+    <div style="font-size:13px; color:var(--muted); margin-top:6px;">{{ commodity_summary.lowest_state }}</div>
+  </div>
+
+  <div style="background:#ffffff; border:1px solid var(--stroke); border-radius:16px; padding:20px; box-shadow:var(--shadow);">
+    <div style="font-size:11px; font-weight:700; text-transform:uppercase; color:var(--muted); margin-bottom:8px;">Avg Monthly Change</div>
+    <div style="font-size:24px; font-weight:800; color:{% if commodity_summary.avg_change|float > 0 %}#166534{% elif commodity_summary.avg_change|float < 0 %}#991b1b{% else %}#0f172a{% endif %}; line-height:1.2;">
+      {{ commodity_summary.avg_change }}%
+    </div>
+    <div style="font-size:13px; color:var(--muted); margin-top:6px;">Compared to previous month</div>
+  </div>
+</div>
+    <div class="results-container" style="animation: fadeIn 0.5s ease; margin-bottom: 40px;">
+      <h4 style="color: var(--navy-dark); margin-bottom: 15px; display: flex; align-items: center; gap: 10px;">
+        <span style="background: var(--accent); width: 4px; height: 20px; border-radius: 2px; display: inline-block;"></span>
+        {{ table_title }}
+      </h4>
+
+      <div style="background: var(--panel); border-radius: var(--radius-md); padding: 20px; box-shadow: var(--shadow); border: 1px solid var(--stroke);">
+        <div style="overflow-x: auto; max-height: 500px;">
+          <table class="commodity-table" style="width: 100%; border-collapse: collapse; font-size: 13px; text-align: left;">
+            <thead style="position: sticky; top: 0; background: #f8fafc; z-index: 1;">
+              <tr style="border-bottom: 2px solid var(--stroke);">
+                <th style="padding: 15px 10px;">State</th>
+                <th style="padding: 15px 10px;">Price ({{ current_price_label }})</th>
+                <th style="padding: 15px 10px;">Prev Month ({{ previous_price_label }})</th>
+                <th style="padding: 15px 10px;">Monthly Change</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in state_data %}
+              {% set change_val = row.change_over_previous_month|default(0)|float %}
+              <tr style="border-bottom: 1px solid #f1f5f9;">
+                <td style="padding: 15px 10px; font-weight: 700;">{{ row.state }}</td>
+                <td style="padding: 15px 10px; color: var(--accent); font-weight: 800;">₹{{ row.current_price }}</td>
+                <td style="padding: 15px 10px; color: var(--muted);">₹{{ row.previous_price }}</td>
+                <td style="padding: 15px 10px;">
+                  <span style="padding: 5px 10px; border-radius: 6px; font-weight: 800; font-size: 11px; {% if change_val > 0 %}background:#dcfce7; color:#166534;{% elif change_val < 0 %}background:#fee2e2; color:#991b1b;{% else %}background:#e2e8f0; color:#334155;{% endif %}">
+                    {% if change_val > 0 %}▲{% elif change_val < 0 %}▼{% else %}■{% endif %}
+                    {{ row.change_over_previous_month }}%
+                  </span>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    {% else %}
+    <div style="text-align: center; padding: 60px; color: var(--muted); border: 2px dashed var(--stroke); border-radius: var(--radius-md); margin-bottom: 40px;">
+      <div style="font-size: 40px; margin-bottom: 10px;">📊</div>
+      <p>Select a commodity from the dropdown above to view real-time market trends across India.</p>
+    </div>
+    {% endif %}
+
+    <div class="section-tag">Weather Search</div>
+    <div style="background: var(--panel); border: 1px solid var(--stroke); border-radius: var(--radius-md); padding: 22px; box-shadow: var(--shadow); margin-bottom: 30px;">
+  <form action="{{ url_for('main.home') }}" method="GET" style="display: flex; gap: 10px; align-items: end; flex-wrap: wrap; margin-bottom: 18px;">
+    <input type="hidden" name="cmdt_id" value="{{ selected_id }}">
+    <input type="hidden" name="year" value="{{ selected_year }}">
+    <input type="hidden" name="month" value="{{ selected_month }}">
+
+    <div style="flex: 1; min-width: 260px;">
+      <label style="display: block; font-size: 11px; font-weight: 700; color: var(--muted); margin-bottom: 6px; text-transform: uppercase;">
+        Search City
+      </label>
+      <input
+        type="text"
+        name="city_search"
+        placeholder="Enter city name..."
+        value="{{ search_query }}"
+        style="width: 100%; border: 1px solid var(--stroke); border-radius: 10px; font-size: 14px; padding: 12px 14px; outline: none; background: #f8fafc; box-sizing: border-box;"
+      >
+    </div>
+
+    <button type="submit" style="background: var(--accent); color: white; border: none; border-radius: 10px; padding: 12px 18px; font-size: 13px; cursor: pointer; font-weight: 800; height: 44px;">
+      SEARCH
+    </button>
+  </form>
+
+  <div style="background: #ffffff; border: 1px solid var(--stroke); border-radius: 16px; padding: 20px;">
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; flex-wrap: wrap; margin-bottom: 18px;">
+      <div>
+        <strong style="color: var(--navy-dark); font-size: 22px; display: block; margin-bottom: 4px;">
+          {{ weather_card.location }}
+        </strong>
+        <div style="font-size: 14px; color: var(--accent); font-weight: 700;">
+          {{ weather_card.desc }}
         </div>
       </div>
 
-      <aside class="profile-panel">
-        <div class="profile-head">
-          <div class="profile-avatar">
-            {{ (session.get('user_name', 'U')[0] if session.get('user_name') else 'U')|upper }}
-          </div>
-          <div>
-            <span>Signed in user</span>
-            <strong>{{ session.get('user_name', 'User') }}</strong>
-          </div>
-        </div>
+      {% if weather_card.temp != "--" %}
+      <div style="text-align: right;">
+        <span style="font-size: 34px; font-weight: 800; color: var(--text);">{{ weather_card.temp }}°C</span>
+        <img src="https://openweathermap.org/img/wn/{{ weather_card.icon }}@2x.png" style="width: 56px; display: block; margin-left: auto;">
+      </div>
+      {% endif %}
+    </div>
 
-        <div class="profile-item">
-          <small>Email</small>
-          <div>{{ session.get('user_email', 'No email available') }}</div>
-        </div>
+    <div style="display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 16px;">
+      <div style="background: #f8fafc; border: 1px solid var(--stroke); border-radius: 12px; padding: 12px 14px; min-width: 140px;">
+        <div style="font-size: 11px; color: var(--muted); font-weight: 700; text-transform: uppercase; margin-bottom: 5px;">Humidity</div>
+        <div style="font-size: 16px; color: var(--text); font-weight: 800;">{{ weather_card.humidity }}%</div>
+      </div>
 
-        <div class="profile-item">
-          <small>Role</small>
-          <div>Dashboard User</div>
-        </div>
+      <div style="background: #f8fafc; border: 1px solid var(--stroke); border-radius: 12px; padding: 12px 14px; min-width: 140px;">
+        <div style="font-size: 11px; color: var(--muted); font-weight: 700; text-transform: uppercase; margin-bottom: 5px;">Wind Speed</div>
+        <div style="font-size: 16px; color: var(--text); font-weight: 800;">{{ weather_card.wind }} m/s</div>
+      </div>
+    </div>
 
-        <div class="profile-item">
-          <small>Status</small>
-          <div>Active Session</div>
-        </div>
-      </aside>
-    </section>
+    <div style="margin-top: 12px; background: #f8fafc; padding: 12px 14px; border-radius: 12px; border-left: 4px solid var(--accent); font-family: 'Courier New', Courier, monospace;">
+      <p style="font-size: 11px; margin: 0; color: #1e293b; white-space: pre-line; line-height: 1.6;">
+        {{ weather_card.overview }}
+      </p>
+    </div>
+  </div>
+</div>
 
-    <!-- About + Contact -->
-    <section class="middle-grid">
-      <div class="about-panel">
-        <div class="section-tag">About Seamless Automations</div>
 
-        <div class="about-header">
-          <h2>A more professional view of the platform and the organization behind it.</h2>
-          <p>
-            Seamless Automations focuses on digital automation and technology-driven
-            solutions that help businesses improve efficiency, streamline operations,
-            and build practical software systems. This dashboard reflects that direction
-            through a layout that is simpler, more restrained, and easier to scan.
+    <div class="dashboard-stack">
+      <footer
+        style="
+          background:#111c4e;
+          margin-top:40px;
+          border-radius:20px; 
+          padding:32px 28px;
+          width:100%;
+          box-sizing:border-box;
+        "
+      >
+      <div
+        style="
+          display:flex;
+          justify-content:space-between;
+          align-items:flex-start;
+          gap:30px;
+          flex-wrap:wrap;
+          width:100%;
+          margin-bottom:24px;
+        "
+      >
+        <div style="flex:1 1 280px; min-width:260px;">
+          <h4
+            style="
+              margin:0 0 10px 0;
+              color:#ffffff;
+              font-size:22px;
+              font-weight:800;
+              line-height:1.3;
+            "
+          >
+            Seamless Automations
+          </h4>
+          <p
+            style="
+              margin:0;
+              color:rgba(255,255,255,0.85);
+              font-size:14px;
+              line-height:1.8;
+            "
+          >
+            © 2026 Seamless Infinite Innovations. All rights reserved.
           </p>
         </div>
 
-        <div class="about-feature-grid">
-          <div class="feature-card">
-            <div class="feature-icon">⚙️</div>
-            <h3>What we do</h3>
-            <p>
-              We deliver automation, software development, and process optimization
-              solutions that simplify complex tasks and support modern business operations
-              through well-structured technology.
-            </p>
+        <div style="flex:1 1 220px; min-width:220px;">
+          <div
+            style="
+              margin-bottom:10px;
+              color:rgba(255,255,255,0.65);
+              font-size:11px;
+              font-weight:700;
+              text-transform:uppercase;
+              letter-spacing:0.8px;
+            "
+          >
+            Address
           </div>
-
-          <div class="feature-card">
-            <div class="feature-icon">📰</div>
-            <h3>How this dashboard helps</h3>
-            <p>
-              The dashboard provides a centralized interface for organized news workflow
-              activity, helping users access key information quickly in a cleaner and
-              more refined environment.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <aside class="contact-panel">
-        <h3>Contact Information</h3>
-        <p class="contact-intro">
-          Official contact details for Seamless Automations.
-        </p>
-
-        <div class="contact-card">
-          <small>Address</small>
-          <div>
+          <div
+            style="
+              color:rgba(255,255,255,0.95);
+              font-size:15px;
+              line-height:1.8;
+            "
+          >
             B-1081, Oberoi Garden Estate,<br>
             Chandivali, Saki Naka,<br>
             Mumbai - 400072
           </div>
         </div>
 
-        <div class="contact-card">
-          <small>Contact Number</small>
-          <div>
+        <div style="flex:1 1 180px; min-width:180px;">
+          <div
+            style="
+              margin-bottom:10px;
+              color:rgba(255,255,255,0.65);
+              font-size:11px;
+              font-weight:700;
+              text-transform:uppercase;
+              letter-spacing:0.8px;
+            "
+          >
+            Contact Number
+          </div>
+          <div
+            style="
+              color:rgba(255,255,255,0.95);
+              font-size:15px;
+              line-height:1.8;
+            "
+          >
             +91 8850298276<br>
             +91 2266661567
           </div>
         </div>
+      </div>
 
-        <div class="contact-card">
-          <small>Email</small>
-          <div>sales@seamlessautomations.com</div>
+      <div
+        style="
+          display:flex;
+          justify-content:space-between;
+          align-items:center;
+          gap:20px;
+          flex-wrap:wrap;
+          width:100%;
+          padding-top:18px;
+          border-top:1px solid rgba(255,255,255,0.12);
+        "
+      >
+        <div style="flex:1 1 260px; min-width:240px;">
+          <div
+            style="
+              margin-bottom:8px;
+              color:rgba(255,255,255,0.65);
+              font-size:11px;
+              font-weight:700;
+              text-transform:uppercase;
+              letter-spacing:0.8px;
+            "
+          >
+            Email
+          </div>
+          <div
+            style="
+              color:rgba(255,255,255,0.95);
+              font-size:15px;
+              line-height:1.8;
+              word-break:break-word;
+            "
+          >
+            sales@seamlessautomations.com
+          </div>
         </div>
-      </aside>
-    </section>
 
-    <!-- Footer same as landing.html -->
-    <footer class="lp-footer">
-      <p class="lp-footer-copy">© 2026 Seamless Infinite Innovations. All rights reserved.</p>
-      <div class="lp-footer-links">
-        <a href="#">Privacy</a>
-        <a href="#">Terms</a>
-        <a href="#">Contact</a>
+        <div
+          style="
+            display:flex;
+            gap:24px;
+            flex-wrap:wrap;
+            align-items:center;
+            justify-content:flex-end;
+          "
+        >
+          <a
+            href="#"
+            style="
+              color:rgba(255,255,255,0.9);
+              text-decoration:none;
+              font-size:14px;
+              font-weight:600;
+            "
+          >
+            Privacy
+          </a>
+          <a
+            href="#"
+            style="
+              color:rgba(255,255,255,0.9);
+              text-decoration:none;
+              font-size:14px;
+              font-weight:600;
+            "
+          >
+            Terms
+          </a>
+          <a
+            href="#"
+            style="
+              color:rgba(255,255,255,0.9);
+              text-decoration:none;
+              font-size:14px;
+              font-weight:600;
+            "
+          >
+            Contact
+          </a>
+        </div>
       </div>
     </footer>
-
+    </div>
   </div>
 </div>
-
 {% endblock %}

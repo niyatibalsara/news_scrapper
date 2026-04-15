@@ -1,22 +1,187 @@
 <nav class="navbar navbar-menu-style">
 
-  <!-- LEFT: Logo -->
+  <style>
+    .nav-right-links {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-left: auto;
+      position: relative;
+    }
+
+    .nav-profile-dropdown {
+      position: relative;
+    }
+
+    .nav-profile-trigger {
+      background: transparent;
+      border: none;
+      padding: 0;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .nav-profile-avatar {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      background: #dbe7ff;
+      color: #1e3a8a;
+      border: 1px solid #c7d7fe;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      font-weight: 800;
+      box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .nav-profile-trigger:hover .nav-profile-avatar {
+      transform: translateY(-1px);
+      box-shadow: 0 12px 24px rgba(15, 23, 42, 0.12);
+    }
+
+    .nav-profile-avatar-lg {
+      width: 54px;
+      height: 54px;
+      font-size: 22px;
+    }
+
+    .nav-profile-menu {
+      position: absolute;
+      top: calc(100% + 12px);
+      right: 0;
+      width: 320px;
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 18px;
+      box-shadow: 0 18px 40px rgba(15, 23, 42, 0.14);
+      padding: 18px;
+      display: none;
+      z-index: 1200;
+    }
+
+    .nav-profile-menu.show {
+      display: block;
+    }
+
+    .nav-profile-menu-head {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid #eef2f7;
+    }
+
+    .nav-profile-menu-user {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+
+    .nav-profile-menu-user small {
+      color: #64748b;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.7px;
+      margin-bottom: 4px;
+    }
+
+    .nav-profile-menu-user strong {
+      color: #0f172a;
+      font-size: 16px;
+      font-weight: 800;
+      line-height: 1.3;
+    }
+
+    .nav-profile-menu-user span {
+      color: #64748b;
+      font-size: 13px;
+      line-height: 1.5;
+      word-break: break-word;
+    }
+
+    .nav-profile-menu-body {
+      display: grid;
+      gap: 12px;
+      padding: 14px 0;
+    }
+
+    .nav-profile-detail {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 14px;
+      padding: 12px 14px;
+    }
+
+    .nav-profile-detail small {
+      display: block;
+      color: #64748b;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.7px;
+      margin-bottom: 5px;
+    }
+
+    .nav-profile-detail div {
+      color: #0f172a;
+      font-size: 14px;
+      font-weight: 700;
+      line-height: 1.5;
+      word-break: break-word;
+    }
+
+    .nav-profile-menu-footer {
+      padding-top: 14px;
+      border-top: 1px solid #eef2f7;
+    }
+
+    .nav-profile-logout {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      text-decoration: none;
+      background: #1e3a8a;
+      color: #ffffff;
+      font-weight: 800;
+      font-size: 14px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      transition: background 0.2s ease;
+    }
+
+    .nav-profile-logout:hover {
+      background: #163074;
+    }
+
+    @media (max-width: 768px) {
+      .nav-profile-menu {
+        width: 260px;
+        right: -8px;
+      }
+    }
+  </style>
+
   <div class="nav-brand">
     <a href="{{ url_for('main.home') }}">
       <img src="{{ url_for('static', filename='images/logo2.png') }}" alt="Seamless" class="nav-logo" />
     </a>
   </div>
 
-  <!-- CENTER: Nav links with dropdowns -->
   <div class="nav-center-links" id="navCenterLinks">
 
     <a href="{{ url_for('main.home') }}"
        class="nav-main-btn nav-direct-link {{ 'active' if request.endpoint == 'main.home' else '' }}"
        style="text-decoration:none;">
       Dashboard
-    </a>
+    </a>  
 
-    <!-- View Master dropdown -->
     <div class="nav-item-dropdown">
       <button class="nav-main-btn {{ 'active' if request.endpoint in ['main.view_keywords','main.view_websites','main.view_news_type','main.view_commodity'] else '' }}" type="button">
         View Master
@@ -44,7 +209,6 @@
       </div>
     </div>
 
-    <!-- News Processing dropdown -->
     <div class="nav-item-dropdown">
       <button class="nav-main-btn {{ 'active' if request.endpoint in ['main.today_published_news','main.all_non_published_news'] else '' }}" type="button">
         News Processing
@@ -64,7 +228,6 @@
       </div>
     </div>
 
-    <!-- Settings (direct link) -->
     <a href="{{ url_for('main.user_settings') }}"
        class="nav-main-btn nav-direct-link {{ 'active' if request.endpoint == 'main.user_settings' else '' }}"
        style="text-decoration:none;">
@@ -73,14 +236,80 @@
 
   </div>
 
-  <!-- RIGHT: Logout -->
   <div class="nav-right-links">
-    <a href="{{ url_for('auth.logout') }}" class="logout-link">Logout</a>
+    <div class="nav-profile-dropdown" id="navProfileDropdown">
+      <button type="button" class="nav-profile-trigger" id="navProfileTrigger" aria-label="Open profile menu">
+        <span class="nav-profile-avatar">
+          {{ (session.get('user_name', 'U')[0] if session.get('user_name') else 'U')|upper }}
+        </span>
+      </button>
+
+      <div class="nav-profile-menu" id="navProfileMenu">
+        <div class="nav-profile-menu-head">
+          <div class="nav-profile-avatar nav-profile-avatar-lg">
+            {{ (session.get('user_name', 'U')[0] if session.get('user_name') else 'U')|upper }}
+          </div>
+
+          <div class="nav-profile-menu-user">
+            <small>Signed in user</small>
+            <strong>{{ session.get('user_name', 'User') }}</strong>
+            <span>{{ session.get('user_email', 'No email available') }}</span>
+          </div>
+        </div>
+
+        <div class="nav-profile-menu-body">
+          <div class="nav-profile-detail">
+            <small>Email</small>
+            <div>{{ session.get('user_email', 'No email available') }}</div>
+          </div>
+
+          <div class="nav-profile-detail">
+            <small>Role</small>
+            <div>Dashboard User</div>
+          </div>
+
+          <div class="nav-profile-detail">
+            <small>Status</small>
+            <div>Active Session</div>
+          </div>
+        </div>
+
+        <div class="nav-profile-menu-footer">
+          <a href="{{ url_for('auth.logout') }}" class="nav-profile-logout">Logout</a>
+        </div>
+      </div>
+    </div>
   </div>
 
-  <!-- Mobile hamburger -->
   <button class="nav-hamburger" id="navHamburger" aria-label="Toggle menu">
     <span></span><span></span><span></span>
   </button>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      const trigger = document.getElementById("navProfileTrigger");
+      const menu = document.getElementById("navProfileMenu");
+      const dropdown = document.getElementById("navProfileDropdown");
+
+      if (trigger && menu && dropdown) {
+        trigger.addEventListener("click", function (e) {
+          e.stopPropagation();
+          menu.classList.toggle("show");
+        });
+
+        document.addEventListener("click", function (e) {
+          if (!dropdown.contains(e.target)) {
+            menu.classList.remove("show");
+          }
+        });
+
+        document.addEventListener("keydown", function (e) {
+          if (e.key === "Escape") {
+            menu.classList.remove("show");
+          }
+        });
+      }
+    });
+  </script>
 
 </nav>

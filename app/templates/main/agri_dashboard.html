@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+{% block title %}Agri Insights | Seamless{% endblock %}
+
+{% block content %}
+<div class="dashboard-shell">
+  <div class="container">
+    <div class="section-tag">Market Intelligence</div>
+    <h1 style="margin-bottom: 24px;">Agricultural <span>Commodities</span> & Weather</h1>
+
+    <div style="background: var(--panel); padding: 24px; border-radius: var(--radius-lg); border: 1px solid var(--stroke); margin-bottom: 24px; display: flex; align-items: center; gap: 30px; box-shadow: var(--shadow);">
+      <div style="font-size: 48px;">🌤️</div>
+      <div>
+        <h3 style="margin: 0; color: var(--primary);">{{ weather.location }} Weather</h3>
+        <p style="margin: 5px 0; font-size: 18px; color: var(--text);">{{ weather.temp }}°C — {{ weather.desc }}</p>
+        <small style="color: var(--muted);">Humidity: {{ weather.humidity }}% | Real-time Update</small>
+      </div>
+    </div>
+
+    <div class="summary-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px;">
+      {% for item in commodities %}
+      <div class="summary-card" style="border-left: 5px solid var(--accent); background: var(--panel); padding: 20px; border-radius: var(--radius-md); box-shadow: var(--shadow);">
+        <div style="display: flex; justify-content: space-between; align-items: start;">
+          <small style="text-transform: uppercase; letter-spacing: 1px; color: var(--muted); font-weight: 600;">{{ item.name }}</small>
+          <span style="padding: 4px 8px; border-radius: 8px; font-size: 12px; background: {% if item.trend == 'up' %}#ecfdf5; color: #10b981;{% else %}#fef2f2; color: #ef4444;{% endif %}">
+            {% if item.trend == 'up' %}Price Rising ▲{% else %}Price Falling ▼{% endif %}
+          </span>
+        </div>
+        <h2 style="margin: 15px 0 5px; color: var(--navy-dark);">₹{{ item.price }}</h2>
+        <p style="margin: 0; font-size: 13px; color: var(--muted);">Current Modal Price per {{ item.unit }}</p>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}
