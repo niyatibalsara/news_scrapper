@@ -112,11 +112,11 @@ def init_db():
     id                  INT AUTO_INCREMENT PRIMARY KEY,
     source_id           INT,                          -- original id from non_published_news
     news_date           DATE,
-    news_type           VARCHAR(255),
-    news_headline       VARCHAR(500),
+    news_type           LONGTEXT,
+    news_headline       LONGTEXT,
     news_text           LONGTEXT,
     news_url            TEXT,
-    keywords            VARCHAR(255),
+    keywords            LONGTEXT,
     date_of_insert      DATETIME,                     -- original insert date from source
     published_at        DATETIME DEFAULT CURRENT_TIMESTAMP,  -- when it was published
     pdf_path            VARCHAR(500),                 -- path to generated PDF file
@@ -140,6 +140,21 @@ def init_db():
     updated_at            DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
     """)
+
+    # ═══ SCHEMA MIGRATIONS ═══
+    # Upgrade existing published_news table columns to LONGTEXT if needed
+    try:
+        cursor.execute("SHOW COLUMNS FROM published_news LIKE 'news_type'")
+        col = cursor.fetchone()
+        if col and 'VARCHAR' in str(col).upper():
+            print("[DB] Upgrading published_news columns to LONGTEXT...")
+            cursor.execute("ALTER TABLE published_news MODIFY news_type LONGTEXT")
+            cursor.execute("ALTER TABLE published_news MODIFY news_headline LONGTEXT")
+            cursor.execute("ALTER TABLE published_news MODIFY keywords LONGTEXT")
+            db.commit()
+            print("[DB] Schema migration completed")
+    except Exception as e:
+        print(f"[DB] Schema check failed (might be first run): {e}")
 
     
     db.commit()

@@ -1,1120 +1,15 @@
-"""
-main.py
--------
-Key behaviours
-──────────────
-• Scraper scheduling
-  - init_scheduler() starts ONE daemon thread on app startup.
-  - Ticks every 30 s (fine-grained enough for 1-minute intervals).
-  - _is_due() checks whether each active category's schedule has elapsed.
-  - 'Run All Together' → only the global schedule is checked; all active
-    categories are scraped together when it fires.
-  - Per-category mode → each category fires independently on its own schedule.
-
-• Category filtering
-  - target_categories passed directly to run_news_scraper().
-  - news_scraper.py keeps only articles whose headlines/body contain
-    keywords belonging to the selected categories.
-  - Selecting 'all' keeps everything that matches any keyword.
-
-• Auto-publish vs Manual
-  - publish_mode = 'auto'   → scraper inserts directly into published_news
-                               then kicks off PDF + email immediately.
-  - publish_mode = 'manual' → scraper inserts into non_published_news (default).
-
-• refresh_news button
-  - Behaviour identical to the original: fires _bg_scraper immediately,
-    respects current settings (categories + publish_mode).
-"""
-
 from .auth import login_required
 from app.db import get_db
 
+import concurrent.futures
 import json
 import os
-import smtplib
-import threading
-import traceback
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import date, datetime, timedelta
-from email import encoders
-from email.mime.base import MIMEBase
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-
-import mysql.connector
-from flask import (Blueprint, current_app, flash, jsonify,
-                   redirect, render_template, request,
-                   send_from_directory, url_for)
-
-main_bp = Blueprint("main", __name__)
-
-PER_PAGE = 10
-
-# ── Scraper state (shared across threads) ─────────────────────
-_scraper_lock  = threading.Lock()
-_scraper_state = {"running": False, "message": "", "success": None}
-
-# ── Scheduler singleton ───────────────────────────────────────
-_scheduler_started = False
-_scheduler_lock    = threading.Lock()
-
-# ── Scheduler ticks every 30 s so 1-minute intervals work ────
-SCHEDULER_TICK_SECONDS = 30
-
-
-# ════════════════════════════════════════════════════════════════
-#  HELPERS — DB / MAIL CONFIG  (call inside request/app context)
-# ════════════════════════════════════════════════════════════════
-
-def _raw_conn(db_cfg: dict):
-    return mysql.connector.connect(**db_cfg)
-
-
-# # ── Extract DB config inside a request context ───────────────
-# def _get_db_cfg() -> dict:
-#     cfg = current_app.config
-#     return {
-#         "host":     cfg["MYSQL_HOST"],
-#         "user":     cfg["MYSQL_USER"],
-#         "password": cfg["MYSQL_PASSWORD"],
-#         "database": cfg["MYSQL_DB"],
-#     }
-
-
-# # ================================================================
-# #  Background: PDF generation + email
-# #
-# #  Called AFTER:
-# #    - articles are already in published_news (visible to user)
-# #    - source rows are already DELETED from non_published_news
-# #
-# #  This thread ONLY handles: PDF → update pdf_path → send email
-# # ================================================================
-
-# def _bg_pdf_email(db_cfg, mail_cfg, template_dir,
-#                   articles, pub_ids, pdf_folder, settings):
-#     """
-#     Generate a PDF for each published article by visiting its real URL,
-#     update pdf_path in DB, then send the email.
-
-#     Parameters are all plain Python values — no Flask objects.
-#     """
-#     # Lazy import inside the thread to avoid import errors at app startup
-#     try:
-#         from app.pdf_generator import generate_pdf_from_url
-#     except ImportError as e:
-#         print(f"[BG] Cannot import pdf_generator: {e}")
-#         generate_pdf_from_url = None
-
-#     pdf_paths = []
-
-#     for art, pub_id in zip(articles, pub_ids):
-#         news_url  = (art.get("news_url") or "").strip()
-#         safe_name = f"news_{pub_id}.pdf"
-#         out_path  = os.path.join(pdf_folder, safe_name)
-#         pdf_ok    = False
-
-#         if not news_url:
-#             print(f"[BG] pub_id={pub_id} has no URL — skipping PDF")
-#         elif generate_pdf_from_url is None:
-#             print(f"[BG] pdf_generator not available — skipping PDF for pub_id={pub_id}")
-#         else:
-#             try:
-#                 pdf_ok = generate_pdf_from_url(url=news_url, output_path=out_path)
-#             except Exception as e:
-#                 print(f"[BG] PDF generation exception for pub_id={pub_id}: {e}")
-#                 traceback.print_exc()
-
-#         if pdf_ok:
-#             try:
-#                 c = _raw_conn(db_cfg)
-#                 cur = c.cursor()
-#                 cur.execute(
-#                     "UPDATE published_news SET pdf_path=%s WHERE id=%s",
-#                     (safe_name, pub_id)
-#                 )
-#                 c.commit()
-#                 cur.close()
-#                 c.close()
-#                 print(f"[BG] PDF saved and DB updated: {safe_name}")
-#             except Exception as e:
-#                 print(f"[BG] DB update for pdf_path failed pub_id={pub_id}: {e}")
-#             pdf_paths.append(out_path)
-#         else:
-#             print(f"[BG] PDF failed for pub_id={pub_id}, url={news_url}")
-#             pdf_paths.append(None)
-
-#     # ── Send email ───────────────────────────────────────────
-#     if not settings.get("email_on_publish", 1):
-#         print("[BG] email_on_publish=0 — skipping email.")
-#         return
-
-#     try:
-#         _send_email_bg(
-#             articles=articles,
-#             pub_ids=pub_ids,
-#             pdf_paths=pdf_paths,
-#             settings=settings,
-#             mail_cfg=mail_cfg,
-#             template_dir=template_dir,
-#         )
-#     except Exception as e:
-#         print(f"[BG] Email send failed: {e}")
-#         traceback.print_exc()
-#         return
-
-#     # Mark email sent in DB
-#     try:
-#         c = _raw_conn(db_cfg)
-#         cur = c.cursor()
-#         for pid in pub_ids:
-#             cur.execute(
-#                 "UPDATE published_news SET email_sent=1, email_sent_at=NOW() WHERE id=%s",
-#                 (pid,)
-#             )
-#         c.commit()
-#         cur.close()
-#         c.close()
-#         print(f"[BG] email_sent marked for {len(pub_ids)} articles.")
-#     except Exception as e:
-#         print(f"[BG] Mark email_sent error: {e}")
-
-
-# # ================================================================
-# #  Email helpers (no Flask context — safe in any thread)
-# # ================================================================
-
-# def _render_email_template(template_dir: str, news_items: list, date_label: str) -> str:
-#     from jinja2 import Environment, FileSystemLoader
-#     env  = Environment(loader=FileSystemLoader(template_dir))
-#     tmpl = env.get_template("email_template.html")
-#     return tmpl.render(news_items=news_items, date_label=date_label)
-
-
-# def _smtp_send(mail_cfg: dict, msg, recipients: list):
-#     with smtplib.SMTP(mail_cfg["MAIL_SERVER"], mail_cfg["MAIL_PORT"]) as s:
-#         s.ehlo()
-#         if mail_cfg.get("MAIL_USE_TLS", True):
-#             s.starttls()
-#         s.login(mail_cfg["MAIL_USERNAME"], mail_cfg["MAIL_PASSWORD"])
-#         s.sendmail(msg["From"], recipients, msg.as_string())
-#         print(f"[EMAIL] Sent to: {recipients}")
-
-
-# def _send_email_bg(articles, pub_ids, pdf_paths, settings, mail_cfg, template_dir):
-#     to        = settings.get("email_recipient") or "niyati.b@seamlessautomations.com"
-#     cc_raw    = settings.get("email_cc") or ""
-#     cc        = [e.strip() for e in cc_raw.split(",") if e.strip()]
-#     pfx       = settings.get("email_subject_prefix") or "Daily News Alert"
-#     mode      = settings.get("publish_mode", "manual")
-#     date_label = datetime.now().strftime("%d %B %Y")
-
-#     if mode == "auto":
-#         base  = mail_cfg.get("BASE_URL", "http://127.0.0.1:5000")
-#         items = [
-#             dict(a, pdf_view_url=f"{base}/download-pdf/{pid}")
-#             for a, pid in zip(articles, pub_ids)
-#         ]
-#         html_body = _render_email_template(template_dir, items, date_label)
-#     else:
-#         html_body = _render_email_template(template_dir, list(articles), date_label)
-
-#     msg            = MIMEMultipart("mixed")
-#     msg["Subject"] = f"{pfx} — {date_label}"
-#     msg["From"]    = mail_cfg.get("MAIL_FROM", mail_cfg.get("MAIL_USERNAME", ""))
-#     msg["To"]      = to
-#     if cc:
-#         msg["Cc"]  = ", ".join(cc)
-
-#     msg.attach(MIMEText(html_body, "html", "utf-8"))
-
-#     # Attach PDFs in manual mode
-#     if mode != "auto":
-#         for p in pdf_paths:
-#             if p and os.path.exists(p):
-#                 with open(p, "rb") as f:
-#                     part = MIMEBase("application", "octet-stream")
-#                     part.set_payload(f.read())
-#                 encoders.encode_base64(part)
-#                 part.add_header(
-#                     "Content-Disposition",
-#                     f'attachment; filename="{os.path.basename(p)}"'
-#                 )
-#                 msg.attach(part)
-
-#     _smtp_send(mail_cfg, msg, [to] + cc)
-
-
-# # ================================================================
-# #  Background scraper
-# # ================================================================
-
-# def _bg_scraper(db_cfg: dict, instance_path: str):
-#     global _scraper_state
-#     with _scraper_lock:
-#         _scraper_state.update({"running": True, "message": "Scraper running…", "success": None})
-#     try:
-#         from app.news_scraper import run_news_scraper
-#         result = run_news_scraper(db_config=db_cfg, instance_path=instance_path)
-#         with _scraper_lock:
-#             _scraper_state.update({
-#                 "success": result.get("success", False),
-#                 "message": result.get("message", "Scraper finished."),
-#             })
-#     except Exception as e:
-#         with _scraper_lock:
-#             _scraper_state.update({"success": False, "message": f"Scraper error: {e}"})
-#         traceback.print_exc()
-#     finally:
-#         with _scraper_lock:
-#             _scraper_state["running"] = False
-
-
-# # ================================================================
-# #  Routes
-# # ================================================================
-
-# @main_bp.route("/")
-# def index():
-#     return render_template("main/landing.html")
-
-
-# @main_bp.route("/home")
-# @login_required
-# def home():
-#     db = get_db()
-#     cursor = db.cursor(dictionary=True)
-#     today = date.today()
-#     pub = unpub = 0
-#     try:
-#         cursor.execute(
-#             "SELECT COUNT(*) AS cnt FROM published_news WHERE DATE(published_at)=%s",
-#             (today,)
-#         )
-#         pub = cursor.fetchone()["cnt"]
-#         cursor.execute(
-#             "SELECT COUNT(*) AS cnt FROM non_published_news WHERE published=0"
-#         )
-#         unpub = cursor.fetchone()["cnt"]
-#     except Exception as e:
-#         print(f"[HOME] count error: {e}")
-#     finally:
-#         cursor.close()
-#     return render_template(
-#         "main/home.html",
-#         today_published_count=pub,
-#         today_unpublished_count=unpub,
-#     )
-
-
-# # ── Keywords ──────────────────────────────────────────────────
-# @main_bp.route("/view-keywords", methods=["GET", "POST"])
-# @login_required
-# def view_keywords():
-#     db = get_db()
-#     cursor = db.cursor(dictionary=True)
-#     if request.method == "POST":
-#         action = request.form.get("action")
-#         if action == "add":
-#             sr_no = request.form.get("sr_no", "").strip()
-#             kw    = request.form.get("keyword", "").strip()
-#             if not sr_no or not kw:
-#                 flash("Both Sr. No and Keyword are required.", "danger")
-#             else:
-#                 try:
-#                     sr_no = int(sr_no)
-#                     cursor.execute("SELECT id FROM keywords WHERE sr_no=%s", (sr_no,))
-#                     if cursor.fetchone():
-#                         flash("Sr. No already exists.", "danger")
-#                     else:
-#                         cursor.execute(
-#                             "INSERT INTO keywords(sr_no,keyword) VALUES(%s,%s)",
-#                             (sr_no, kw)
-#                         )
-#                         db.commit()
-#                         flash("Keyword added.", "success")
-#                 except ValueError:
-#                     flash("Sr. No must be a number.", "danger")
-#                 except Exception as e:
-#                     db.rollback()
-#                     flash(f"Error: {e}", "danger")
-#             cursor.close()
-#             return redirect(url_for("main.view_keywords"))
-#         elif action == "edit":
-#             kid = request.form.get("keyword_id", "").strip()
-#             kw  = request.form.get("edit_keyword", "").strip()
-#             if not kid or not kw:
-#                 flash("Keyword ID and value required.", "danger")
-#             else:
-#                 try:
-#                     cursor.execute("UPDATE keywords SET keyword=%s WHERE id=%s", (kw, kid))
-#                     db.commit()
-#                     flash("Updated." if cursor.rowcount else "Not found.",
-#                           "success" if cursor.rowcount else "warning")
-#                 except Exception as e:
-#                     db.rollback()
-#                     flash(f"Error: {e}", "danger")
-#             cursor.close()
-#             return redirect(url_for("main.view_keywords"))
-#         elif action == "bulk_delete":
-#             ids = request.form.getlist("selected_keywords")
-#             if not ids:
-#                 flash("Select at least one.", "warning")
-#             else:
-#                 try:
-#                     ph = ",".join(["%s"] * len(ids))
-#                     cursor.execute(f"DELETE FROM keywords WHERE id IN ({ph})", tuple(ids))
-#                     db.commit()
-#                     flash("Deleted.", "success")
-#                 except Exception as e:
-#                     db.rollback()
-#                     flash(f"Error: {e}", "danger")
-#             cursor.close()
-#             return redirect(url_for("main.view_keywords"))
-#     cursor.execute("SELECT id,sr_no,keyword FROM keywords ORDER BY sr_no ASC")
-#     keywords = cursor.fetchall()
-#     cursor.close()
-#     return render_template("main/view_keywords.html", keywords=keywords)
-
-
-# # ── Websites ───────────────────────────────────────────────────
-# @main_bp.route("/view-websites", methods=["GET", "POST"])
-# @login_required
-# def view_websites():
-#     db = get_db()
-#     cursor = db.cursor(dictionary=True)
-#     if request.method == "POST":
-#         action = request.form.get("action")
-#         if action == "add":
-#             sr_no = request.form.get("sr_no", "").strip()
-#             val   = request.form.get("websites", "").strip()
-#             if not sr_no or not val:
-#                 flash("Both fields required.", "danger")
-#             else:
-#                 try:
-#                     sr_no = int(sr_no)
-#                     cursor.execute("SELECT id FROM websites WHERE sr_no=%s", (sr_no,))
-#                     if cursor.fetchone():
-#                         flash("Sr. No exists.", "danger")
-#                     else:
-#                         cursor.execute(
-#                             "INSERT INTO websites(sr_no,websites) VALUES(%s,%s)",
-#                             (sr_no, val)
-#                         )
-#                         db.commit()
-#                         flash("Website added.", "success")
-#                 except ValueError:
-#                     flash("Sr. No must be a number.", "danger")
-#                 except Exception as e:
-#                     db.rollback()
-#                     flash(f"Error: {e}", "danger")
-#             cursor.close()
-#             return redirect(url_for("main.view_websites"))
-#         elif action == "edit":
-#             wid = request.form.get("websites_id", "").strip()
-#             val = request.form.get("edit_websites", "").strip()
-#             if not wid or not val:
-#                 flash("Both fields required.", "danger")
-#             else:
-#                 try:
-#                     cursor.execute("UPDATE websites SET websites=%s WHERE id=%s", (val, wid))
-#                     db.commit()
-#                     flash("Updated." if cursor.rowcount else "Not found.",
-#                           "success" if cursor.rowcount else "warning")
-#                 except Exception as e:
-#                     db.rollback()
-#                     flash(f"Error: {e}", "danger")
-#             cursor.close()
-#             return redirect(url_for("main.view_websites"))
-#         elif action == "bulk_delete":
-#             ids = request.form.getlist("selected_websites")
-#             if not ids:
-#                 flash("Select at least one.", "warning")
-#             else:
-#                 try:
-#                     ph = ",".join(["%s"] * len(ids))
-#                     cursor.execute(f"DELETE FROM websites WHERE id IN ({ph})", tuple(ids))
-#                     db.commit()
-#                     flash("Deleted.", "success")
-#                 except Exception as e:
-#                     db.rollback()
-#                     flash(f"Error: {e}", "danger")
-#             cursor.close()
-#             return redirect(url_for("main.view_websites"))
-#     cursor.execute("SELECT id,sr_no,websites FROM websites ORDER BY sr_no ASC")
-#     websites = cursor.fetchall()
-#     cursor.close()
-#     return render_template("main/view_websites.html", websites=websites)
-
-
-# # ── News Type ──────────────────────────────────────────────────
-# @main_bp.route("/view-news-type", methods=["GET", "POST"])
-# @login_required
-# def view_news_type():
-#     db = get_db()
-#     cursor = db.cursor(dictionary=True)
-#     if request.method == "POST":
-#         action = request.form.get("action")
-#         if action == "add":
-#             sr_no = request.form.get("sr_no", "").strip()
-#             val   = request.form.get("news_type", "").strip()
-#             if not sr_no or not val:
-#                 flash("Both fields required.", "danger")
-#             else:
-#                 try:
-#                     sr_no = int(sr_no)
-#                     cursor.execute("SELECT id FROM news WHERE sr_no=%s", (sr_no,))
-#                     if cursor.fetchone():
-#                         flash("Sr. No exists.", "danger")
-#                     else:
-#                         cursor.execute(
-#                             "INSERT INTO news(sr_no,news_type) VALUES(%s,%s)",
-#                             (sr_no, val)
-#                         )
-#                         db.commit()
-#                         flash("News type added.", "success")
-#                 except ValueError:
-#                     flash("Sr. No must be a number.", "danger")
-#                 except Exception as e:
-#                     db.rollback()
-#                     flash(f"Error: {e}", "danger")
-#             cursor.close()
-#             return redirect(url_for("main.view_news_type"))
-#         elif action == "edit":
-#             ntid = request.form.get("news_type_id", "").strip()
-#             val  = request.form.get("edit_news_type", "").strip()
-#             if not ntid or not val:
-#                 flash("Both fields required.", "danger")
-#             else:
-#                 try:
-#                     cursor.execute("UPDATE news SET news_type=%s WHERE id=%s", (val, ntid))
-#                     db.commit()
-#                     flash("Updated." if cursor.rowcount else "Not found.",
-#                           "success" if cursor.rowcount else "warning")
-#                 except Exception as e:
-#                     db.rollback()
-#                     flash(f"Error: {e}", "danger")
-#             cursor.close()
-#             return redirect(url_for("main.view_news_type"))
-#         elif action == "bulk_delete":
-#             ids = request.form.getlist("selected_news_types")
-#             if not ids:
-#                 flash("Select at least one.", "warning")
-#             else:
-#                 try:
-#                     ph = ",".join(["%s"] * len(ids))
-#                     cursor.execute(f"DELETE FROM news WHERE id IN ({ph})", tuple(ids))
-#                     db.commit()
-#                     flash("Deleted.", "success")
-#                 except Exception as e:
-#                     db.rollback()
-#                     flash(f"Error: {e}", "danger")
-#             cursor.close()
-#             return redirect(url_for("main.view_news_type"))
-#     cursor.execute("SELECT id,sr_no,news_type FROM news ORDER BY sr_no ASC")
-#     news_types = cursor.fetchall()
-#     cursor.close()
-#     return render_template("main/view_news_type.html", news_types=news_types)
-
-
-# # ── Commodity ──────────────────────────────────────────────────
-# @main_bp.route("/view-commodity", methods=["GET", "POST"])
-# @login_required
-# def view_commodity():
-#     db = get_db()
-#     cursor = db.cursor(dictionary=True)
-#     if request.method == "POST":
-#         action = request.form.get("action")
-#         if action == "add":
-#             sr_no = request.form.get("sr_no", "").strip()
-#             val   = request.form.get("commodity", "").strip()
-#             if not sr_no or not val:
-#                 flash("Both fields required.", "danger")
-#             else:
-#                 try:
-#                     sr_no = int(sr_no)
-#                     cursor.execute("SELECT id FROM commodity WHERE sr_no=%s", (sr_no,))
-#                     if cursor.fetchone():
-#                         flash("Sr. No exists.", "danger")
-#                     else:
-#                         cursor.execute(
-#                             "INSERT INTO commodity(sr_no,commodity) VALUES(%s,%s)",
-#                             (sr_no, val)
-#                         )
-#                         db.commit()
-#                         flash("Commodity added.", "success")
-#                 except ValueError:
-#                     flash("Sr. No must be a number.", "danger")
-#                 except Exception as e:
-#                     db.rollback()
-#                     flash(f"Error: {e}", "danger")
-#             cursor.close()
-#             return redirect(url_for("main.view_commodity"))
-#         elif action == "edit":
-#             cid = request.form.get("commodity_id", "").strip()
-#             val = request.form.get("edit_commodity", "").strip()
-#             if not cid or not val:
-#                 flash("Both fields required.", "danger")
-#             else:
-#                 try:
-#                     cursor.execute("UPDATE commodity SET commodity=%s WHERE id=%s", (val, cid))
-#                     db.commit()
-#                     flash("Updated." if cursor.rowcount else "Not found.",
-#                           "success" if cursor.rowcount else "warning")
-#                 except Exception as e:
-#                     db.rollback()
-#                     flash(f"Error: {e}", "danger")
-#             cursor.close()
-#             return redirect(url_for("main.view_commodity"))
-#         elif action == "bulk_delete":
-#             ids = request.form.getlist("selected_commodities")
-#             if not ids:
-#                 flash("Select at least one.", "warning")
-#             else:
-#                 try:
-#                     ph = ",".join(["%s"] * len(ids))
-#                     cursor.execute(f"DELETE FROM commodity WHERE id IN ({ph})", tuple(ids))
-#                     db.commit()
-#                     flash("Deleted.", "success")
-#                 except Exception as e:
-#                     db.rollback()
-#                     flash(f"Error: {e}", "danger")
-#             cursor.close()
-#             return redirect(url_for("main.view_commodity"))
-#     cursor.execute("SELECT id,sr_no,commodity FROM commodity ORDER BY sr_no ASC")
-#     commodities = cursor.fetchall()
-#     cursor.close()
-#     return render_template("main/view_commodity.html", commodities=commodities)
-
-
-# # ================================================================
-# #  All Non-Published News — GET (paginated)
-# # ================================================================
-
-# @main_bp.route("/all-non-published-news")
-# @login_required
-# def all_non_published_news():
-#     db = get_db()
-#     cursor = db.cursor(dictionary=True)
-
-#     try:
-#         cursor.execute("SELECT * FROM user_settings WHERE id=1")
-#         settings = cursor.fetchone() or {}
-#     except Exception:
-#         settings = {}
-
-#     cats_str = settings.get("content_categories", "all") or "all"
-#     cats     = [c.strip().lower() for c in cats_str.split(",") if c.strip()]
-#     page     = max(1, int(request.args.get("page", 1)))
-
-#     try:
-#         if "all" in cats:
-#             cursor.execute(
-#                 "SELECT COUNT(*) AS cnt FROM non_published_news WHERE published=0"
-#             )
-#         else:
-#             ph = ",".join(["%s"] * len(cats))
-#             cursor.execute(
-#                 f"SELECT COUNT(*) AS cnt FROM non_published_news "
-#                 f"WHERE published=0 AND LOWER(news_type) IN ({ph})",
-#                 tuple(cats)
-#             )
-#         total = cursor.fetchone()["cnt"]
-#         total_pages = max(1, (total + PER_PAGE - 1) // PER_PAGE)
-#         page   = min(page, total_pages)
-#         offset = (page - 1) * PER_PAGE
-
-#         if "all" in cats:
-#             cursor.execute(
-#                 "SELECT id,news_date,news_type,news_headline,"
-#                 "news_text,news_url,keywords,date_of_insert "
-#                 "FROM non_published_news WHERE published=0 "
-#                 "ORDER BY date_of_insert DESC LIMIT %s OFFSET %s",
-#                 (PER_PAGE, offset)
-#             )
-#         else:
-#             ph = ",".join(["%s"] * len(cats))
-#             cursor.execute(
-#                 f"SELECT id,news_date,news_type,news_headline,"
-#                 f"news_text,news_url,keywords,date_of_insert "
-#                 f"FROM non_published_news WHERE published=0 "
-#                 f"AND LOWER(news_type) IN ({ph}) "
-#                 f"ORDER BY date_of_insert DESC LIMIT %s OFFSET %s",
-#                 tuple(cats) + (PER_PAGE, offset)
-#             )
-#         news = cursor.fetchall()
-
-#     except Exception as e:
-#         flash(f"Error loading news: {e}", "danger")
-#         news, total, total_pages, page = [], 0, 1, 1
-#     finally:
-#         cursor.close()
-
-#     with _scraper_lock:
-#         scrape_running = _scraper_state["running"]
-
-#     return render_template(
-#         "main/all_non_published_news.html",
-#         news=news,
-#         scrape_running=scrape_running,
-#         page=page,
-#         total_pages=total_pages,
-#         total=total,
-#         per_page=PER_PAGE,
-#     )
-
-
-# # ================================================================
-# #  All Non-Published News — POST (publish / delete)
-# # ================================================================
-
-# @main_bp.route("/all-non-published-news/actions", methods=["POST"])
-# @login_required
-# def all_non_published_news_actions():
-#     db = get_db()
-#     cursor = db.cursor(dictionary=True)
-#     action = request.form.get("action")
-#     ids    = request.form.getlist("selected_news")
-
-#     if not ids:
-#         flash("Please select at least one article.", "warning")
-#         cursor.close()
-#         return redirect(url_for("main.all_non_published_news"))
-
-#     ph = ",".join(["%s"] * len(ids))
-
-#     try:
-#         # ── DELETE ───────────────────────────────────────────────
-#         if action == "delete":
-#             cursor.execute(
-#                 f"DELETE FROM non_published_news WHERE id IN ({ph})",
-#                 tuple(ids)
-#             )
-#             db.commit()
-#             flash(f"{cursor.rowcount} article(s) deleted.", "success")
-
-#         # ── PUBLISH ──────────────────────────────────────────────
-#         elif action == "publish":
-#             # Fetch selected articles
-#             cursor.execute(
-#                 f"SELECT id, news_date, news_type, news_headline, "
-#                 f"news_text, news_url, keywords, date_of_insert "
-#                 f"FROM non_published_news WHERE id IN ({ph})",
-#                 tuple(ids)
-#             )
-#             articles = cursor.fetchall()
-
-#             if not articles:
-#                 flash("No articles found for selected IDs.", "warning")
-#                 cursor.close()
-#                 return redirect(url_for("main.all_non_published_news"))
-
-#             # Load settings
-#             try:
-#                 cursor.execute("SELECT * FROM user_settings WHERE id=1")
-#                 settings = cursor.fetchone() or {}
-#             except Exception:
-#                 settings = {}
-
-#             # Ensure PDF output folder exists
-#             pdf_folder = current_app.config.get(
-#                 "PDF_FOLDER",
-#                 os.path.join(current_app.root_path, "static", "pdfs")
-#             )
-#             os.makedirs(pdf_folder, exist_ok=True)
-
-#             now     = datetime.now()
-#             pub_ids = []
-
-#             # STEP 1: Insert ALL articles into published_news immediately
-#             # They will appear in Today's Published News right away.
-#             for art in articles:
-#                 cursor.execute(
-#                     "INSERT INTO published_news "
-#                     "(source_id, news_date, news_type, news_headline, "
-#                     "news_text, news_url, keywords, date_of_insert, published_at) "
-#                     "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
-#                     (
-#                         art["id"],
-#                         art["news_date"],
-#                         art["news_type"],
-#                         art["news_headline"],
-#                         art["news_text"],
-#                         art["news_url"],
-#                         art["keywords"],
-#                         art["date_of_insert"],
-#                         now,
-#                     )
-#                 )
-#                 db.commit()
-#                 pub_ids.append(cursor.lastrowid)
-
-#             # STEP 2: Delete source rows from non_published_news IMMEDIATELY
-#             # (NOT after PDF generation — this is the fix for articles
-#             #  staying in the non-published list)
-#             cursor.execute(
-#                 f"DELETE FROM non_published_news WHERE id IN ({ph})",
-#                 tuple(ids)
-#             )
-#             db.commit()
-#             print(f"[PUBLISH] Deleted {len(ids)} rows from non_published_news.")
-
-#             # STEP 3: Collect all values needed BEFORE leaving request context
-#             db_cfg = _get_db_cfg()
-#             cfg    = current_app.config
-#             mail_cfg = {
-#                 "MAIL_SERVER":   cfg.get("MAIL_SERVER",   "smtp.gmail.com"),
-#                 "MAIL_PORT":     cfg.get("MAIL_PORT",     587),
-#                 "MAIL_USE_TLS":  cfg.get("MAIL_USE_TLS",  True),
-#                 "MAIL_USERNAME": cfg.get("MAIL_USERNAME", ""),
-#                 "MAIL_PASSWORD": cfg.get("MAIL_PASSWORD", ""),
-#                 "MAIL_FROM":     cfg.get("MAIL_FROM",     cfg.get("MAIL_USERNAME", "")),
-#                 "BASE_URL":      cfg.get("BASE_URL",      "http://127.0.0.1:5000"),
-#             }
-#             template_dir = os.path.join(current_app.root_path, "templates", "main")
-
-#             # STEP 4: PDF generation + email in background thread
-#             # Pass only plain Python values — no Flask objects
-#             threading.Thread(
-#                 target=_bg_pdf_email,
-#                 args=(
-#                     db_cfg,
-#                     mail_cfg,
-#                     template_dir,
-#                     list(articles),   # plain list of dicts
-#                     list(pub_ids),    # plain list of ints
-#                     pdf_folder,       # plain string
-#                     dict(settings),   # plain dict
-#                 ),
-#                 daemon=True,
-#             ).start()
-
-#             flash(
-#                 f"{len(articles)} article(s) published successfully! "
-#                 f"They are now visible in Today's Published News. "
-#                 f"PDFs are being generated from the original news websites in the background.",
-#                 "success",
-#             )
-
-#     except Exception as e:
-#         db.rollback()
-#         flash(f"Error during publish: {e}", "danger")
-#         traceback.print_exc()
-#     finally:
-#         cursor.close()
-
-#     return redirect(url_for("main.all_non_published_news"))
-
-
-# # ================================================================
-# #  Refresh News — background scraper
-# # ================================================================
-
-# @main_bp.route("/refresh-news", methods=["POST"])
-# @login_required
-# def refresh_news():
-#     with _scraper_lock:
-#         if _scraper_state["running"]:
-#             flash("Scraper is already running.", "warning")
-#             return redirect(url_for("main.all_non_published_news"))
-
-#     # Extract plain values INSIDE request context, then pass to thread
-#     db_cfg        = _get_db_cfg()
-#     instance_path = current_app.instance_path
-
-#     threading.Thread(
-#         target=_bg_scraper,
-#         args=(db_cfg, instance_path),
-#         daemon=True,
-#     ).start()
-
-#     flash("News refresh started in the background. Page will auto-update when complete.", "info")
-#     return redirect(url_for("main.all_non_published_news"))
-
-
-# @main_bp.route("/refresh-news/status")
-# @login_required
-# def refresh_news_status():
-#     with _scraper_lock:
-#         state = dict(_scraper_state)
-#     return jsonify(state)
-
-
-# # ================================================================
-# #  Today's Published News — paginated
-# # ================================================================
-
-# @main_bp.route("/today-published-news")
-# @login_required
-# def today_published_news():
-#     db = get_db()
-#     cursor = db.cursor(dictionary=True)
-#     today = date.today()
-#     page  = max(1, int(request.args.get("page", 1)))
-
-#     try:
-#         cursor.execute(
-#             "SELECT COUNT(*) AS cnt FROM published_news WHERE DATE(published_at)=%s",
-#             (today,)
-#         )
-#         total = cursor.fetchone()["cnt"]
-#         total_pages = max(1, (total + PER_PAGE - 1) // PER_PAGE)
-#         page   = min(page, total_pages)
-#         offset = (page - 1) * PER_PAGE
-
-#         cursor.execute(
-#             "SELECT id, news_date, news_type, news_headline, "
-#             "news_url, pdf_path, published_at "
-#             "FROM published_news WHERE DATE(published_at)=%s "
-#             "ORDER BY published_at DESC LIMIT %s OFFSET %s",
-#             (today, PER_PAGE, offset)
-#         )
-#         news = cursor.fetchall()
-
-#     except Exception as e:
-#         flash(f"Error loading published news: {e}", "danger")
-#         news, total, total_pages, page = [], 0, 1, 1
-#     finally:
-#         cursor.close()
-
-#     return render_template(
-#         "main/today_published_news.html",
-#         news=news,
-#         today=today,
-#         page=page,
-#         total_pages=total_pages,
-#         total=total,
-#         per_page=PER_PAGE,
-#     )
-
-
-# # ================================================================
-# #  Check PDF ready — polled by JS every 8 s
-# # ================================================================
-
-# @main_bp.route("/check-pdf/<int:news_id>")
-# @login_required
-# def check_pdf_ready(news_id):
-#     db = get_db()
-#     cursor = db.cursor(dictionary=True)
-#     try:
-#         cursor.execute(
-#             "SELECT pdf_path FROM published_news WHERE id=%s",
-#             (news_id,)
-#         )
-#         row = cursor.fetchone()
-#     finally:
-#         cursor.close()
-
-#     ready = False
-#     if row and row.get("pdf_path"):
-#         pdf_folder = current_app.config.get(
-#             "PDF_FOLDER",
-#             os.path.join(current_app.root_path, "static", "pdfs")
-#         )
-#         fp    = os.path.join(pdf_folder, row["pdf_path"])
-#         ready = os.path.exists(fp) and os.path.getsize(fp) > 500
-
-#     return jsonify({"ready": ready})
-
-
-# # ================================================================
-# #  Download PDF
-# # ================================================================
-
-# @main_bp.route("/download-pdf/<int:news_id>")
-# @login_required
-# def download_pdf(news_id):
-#     db = get_db()
-#     cursor = db.cursor(dictionary=True)
-#     try:
-#         cursor.execute(
-#             "SELECT pdf_path FROM published_news WHERE id=%s",
-#             (news_id,)
-#         )
-#         row = cursor.fetchone()
-#     finally:
-#         cursor.close()
-
-#     if not row or not row["pdf_path"]:
-#         flash("PDF is still being generated — please try again in a moment.", "warning")
-#         return redirect(url_for("main.today_published_news"))
-
-#     pdf_folder = current_app.config.get(
-#         "PDF_FOLDER",
-#         os.path.join(current_app.root_path, "static", "pdfs")
-#     )
-#     return send_from_directory(pdf_folder, row["pdf_path"], as_attachment=True)
-
-
-# # ================================================================
-# #  Manual re-send email for today
-# # ================================================================
-
-# @main_bp.route("/send-email-today")
-# @login_required
-# def send_email_today():
-#     db = get_db()
-#     cursor = db.cursor(dictionary=True)
-#     today  = date.today()
-
-#     try:
-#         cursor.execute(
-#             "SELECT id, news_date, news_type, news_headline, news_url, pdf_path "
-#             "FROM published_news WHERE DATE(published_at)=%s "
-#             "ORDER BY published_at DESC",
-#             (today,)
-#         )
-#         articles = cursor.fetchall()
-
-#         if not articles:
-#             flash("No published news for today.", "warning")
-#             cursor.close()
-#             return redirect(url_for("main.today_published_news"))
-
-#         try:
-#             cursor.execute("SELECT * FROM user_settings WHERE id=1")
-#             settings = cursor.fetchone() or {}
-#         except Exception:
-#             settings = {}
-
-#         cfg = current_app.config
-#         mail_cfg = {
-#             "MAIL_SERVER":   cfg.get("MAIL_SERVER",   "smtp.gmail.com"),
-#             "MAIL_PORT":     cfg.get("MAIL_PORT",     587),
-#             "MAIL_USE_TLS":  cfg.get("MAIL_USE_TLS",  True),
-#             "MAIL_USERNAME": cfg.get("MAIL_USERNAME", ""),
-#             "MAIL_PASSWORD": cfg.get("MAIL_PASSWORD", ""),
-#             "MAIL_FROM":     cfg.get("MAIL_FROM",     cfg.get("MAIL_USERNAME", "")),
-#             "BASE_URL":      cfg.get("BASE_URL",      "http://127.0.0.1:5000"),
-#         }
-#         pdf_folder   = cfg.get("PDF_FOLDER", os.path.join(current_app.root_path, "static", "pdfs"))
-#         template_dir = os.path.join(current_app.root_path, "templates", "main")
-#         pdf_paths    = [
-#             os.path.join(pdf_folder, a["pdf_path"])
-#             for a in articles if a.get("pdf_path")
-#         ]
-#         pub_ids = [a["id"] for a in articles]
-
-#         _send_email_bg(
-#             articles=list(articles),
-#             pub_ids=pub_ids,
-#             pdf_paths=pdf_paths,
-#             settings=dict(settings),
-#             mail_cfg=mail_cfg,
-#             template_dir=template_dir,
-#         )
-#         flash("Email sent successfully.", "success")
-
-#     except Exception as e:
-#         flash(f"Failed to send email: {e}", "danger")
-#         traceback.print_exc()
-#     finally:
-#         cursor.close()
-
-#     return redirect(url_for("main.today_published_news"))
-
-
-# # ================================================================
-# #  User Settings
-# # ================================================================
-
-# @main_bp.route("/user-settings", methods=["GET", "POST"])
-# @login_required
-# def user_settings():
-#     db = get_db()
-#     cursor = db.cursor(dictionary=True)
-
-#     if request.method == "POST":
-#         try:
-#             cursor.execute(
-#                 "INSERT INTO user_settings "
-#                 "(id, run_frequency, custom_frequency, scraper_enabled, "
-#                 "publish_mode, content_categories, email_recipient, "
-#                 "email_cc, email_subject_prefix, email_on_publish) "
-#                 "VALUES (1,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
-#                 "ON DUPLICATE KEY UPDATE "
-#                 "run_frequency=VALUES(run_frequency), "
-#                 "custom_frequency=VALUES(custom_frequency), "
-#                 "scraper_enabled=VALUES(scraper_enabled), "
-#                 "publish_mode=VALUES(publish_mode), "
-#                 "content_categories=VALUES(content_categories), "
-#                 "email_recipient=VALUES(email_recipient), "
-#                 "email_cc=VALUES(email_cc), "
-#                 "email_subject_prefix=VALUES(email_subject_prefix), "
-#                 "email_on_publish=VALUES(email_on_publish)",
-#                 (
-#                     request.form.get("run_frequency", "1"),
-#                     request.form.get("custom_frequency") or None,
-#                     1 if request.form.get("scraper_enabled") else 0,
-#                     request.form.get("publish_mode", "manual"),
-#                     ",".join(request.form.getlist("content_categories")) or "all",
-#                     request.form.get("email_recipient", "").strip(),
-#                     request.form.get("email_cc", "").strip(),
-#                     request.form.get("email_subject_prefix", "Daily News Alert").strip(),
-#                     1 if request.form.get("email_on_publish") else 0,
-#                 )
-#             )
-#             db.commit()
-#             flash("Settings saved.", "success")
-#         except Exception as e:
-#             db.rollback()
-#             flash(f"Error: {e}", "danger")
-#         finally:
-#             cursor.close()
-#         return redirect(url_for("main.user_settings"))
-
-#     try:
-#         cursor.execute("SELECT * FROM user_settings WHERE id=1")
-#         settings = cursor.fetchone() or {}
-#     except Exception:
-#         settings = {}
-#     finally:
-#         cursor.close()
-
-#     return render_template("main/user_settings.html", settings=settings)
-
-
-# def get_settings():
-#     db = get_db()
-#     cursor = db.cursor(dictionary=True)
-#     try:
-#         cursor.execute("SELECT * FROM user_settings WHERE id=1")
-#         return cursor.fetchone() or {}
-#     except Exception:
-#         return {}
-#     finally:
-#         cursor.close()
-
-"""
-main.py
--------
-Updated publish flow:
-  1. Articles inserted into published_news immediately
-  2. Source rows deleted from non_published_news immediately
-  3. Background thread generates PDFs from the ORIGINAL news URL
-  4. DB updated with pdf_path only after successful PDF creation
-  5. Email is sent after PDF processing completes
-
-This version adds:
-  - stronger logging
-  - URL validation logs
-  - PDF folder creation safety
-  - retry-friendly PDF flow
-  - non-daemon background thread for safer execution
-"""
-
-from .auth import login_required
-from app.db import get_db
-
-import os
-import json
 import requests
 import smtplib
 import threading
 import traceback
-from datetime import date, datetime
+import time
+from datetime import date, datetime, timedelta
 from email import encoders
 from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
@@ -1141,13 +36,20 @@ PER_PAGE = 10
 _scraper_lock = threading.Lock()
 _scraper_state = {"running": False, "message": "", "success": None}
 
+# ── Scheduler singleton ───────────────────────────────────────
+_scheduler_started = False
+_scheduler_lock = threading.Lock()
+SCHEDULER_TICK_SECONDS = 30
 
-# ── Raw DB connection (safe in any thread, no Flask g) ────────
+
+# ════════════════════════════════════════════════════════════════
+# HELPERS — DB / MAIL / SETTINGS
+# ════════════════════════════════════════════════════════════════
+
 def _raw_conn(db_cfg: dict):
     return mysql.connector.connect(**db_cfg)
 
 
-# ── Extract DB config inside a request context ───────────────
 def _get_db_cfg() -> dict:
     cfg = current_app.config
     return {
@@ -1157,125 +59,196 @@ def _get_db_cfg() -> dict:
         "database": cfg["MYSQL_DB"],
     }
 
-def get_weather_overview(temp, humidity, wind, desc):
-    wind_status = "Breezy" if wind > 5.0 else "Calm"
-    precip_status = "Rain likely" if "rain" in desc.lower() else "Dry"
 
-    impacts = (
-        "Hazardous for spraying or sensitive tasks."
-        if wind > 5.0 or "rain" in desc.lower()
-        else "Ideal for field work."
-    )
+def _get_mail_cfg() -> dict:
+    cfg = current_app.config
+    return {
+        "MAIL_SERVER": cfg.get("MAIL_SERVER", "smtp.gmail.com"),
+        "MAIL_PORT": cfg.get("MAIL_PORT", 587),
+        "MAIL_USE_TLS": cfg.get("MAIL_USE_TLS", True),
+        "MAIL_USERNAME": cfg.get("MAIL_USERNAME", ""),
+        "MAIL_PASSWORD": cfg.get("MAIL_PASSWORD", ""),
+        "MAIL_FROM": cfg.get("MAIL_FROM", cfg.get("MAIL_USERNAME", "")),
+        "BASE_URL": cfg.get("BASE_URL", "http://127.0.0.1:5000"),
+    }
 
-    overview = (
-        f"* ADVISORY: {desc.upper()} in effect.\n"
-        f"* WHAT: Temp {temp}°C with {humidity}% humidity.\n"
-        f"* WIND: {wind_status} ({wind} m/s).\n"
-        f"* IMPACTS: {precip_status} conditions. {impacts}"
-    )
-    return overview
 
-# Agri and Weather Data
-@main_bp.route("/agri-dashboard")
-@login_required
-def agri_dashboard():
-    # 1. Fetch Live Weather (Thane)
-    # Get free key from openweathermap.org
-    weather_api_key = "2baab2dc7ad18ffef8b81c014e893e1c" 
-    weather_url = f"https://api.openweathermap.org/data/2.5/weather?q=Thane&units=metric&appid={weather_api_key}"
-    
-    weather_data = {"temp": "--", "desc": "Offline", "location": "Thane", "humidity": "--"}
+def _parse_sched_from_form(form, prefix):
+    mode = (form.get(f"{prefix}_schedule_mode") or "").strip()
+    interval = (form.get(f"{prefix}_interval") or "").strip()
+    time_value = (form.get(f"{prefix}_time") or "").strip()
+
+    payload = {}
+
+    if mode:
+        payload["mode"] = mode
+    if interval:
+        payload["interval"] = interval
+    if time_value:
+        payload["time"] = time_value
+
+    return json.dumps(payload) if payload else "{}"
+
+
+def _safe_json_load(raw_value):
+    raw = (raw_value or "").strip()
+    if not raw or raw == "{}":
+        return {}
     try:
-        w_res = requests.get(weather_url, timeout=3).json()
-        if w_res.get("main"):
-            weather_data = {
-                "temp": round(w_res['main']['temp']),
-                "desc": w_res['weather'][0]['description'].capitalize(),
-                "location": w_res['name'],
-                "humidity": w_res['main']['humidity']
-            }
-    except:
-        pass
+        return json.loads(raw)
+    except Exception:
+        return {}
 
-    # 2. Agricultural Commodity Prices
-    # These can be pulled from your DB or a Scraper later
-    commodities = [
-        {"name": "Onion", "price": "2,450", "unit": "Quintal", "trend": "up"},
-        {"name": "Cotton", "price": "7,100", "unit": "Quintal", "trend": "down"},
-        {"name": "Sugarcane", "price": "315", "unit": "Ton", "trend": "up"}
-    ]
 
-    return render_template("main/agri_dashboard.html", 
-                           weather=weather_data, 
-                           commodities=commodities)
+def _interval_minutes_from_schedule(schedule_dict):
+    interval = str(schedule_dict.get("interval", "")).strip().lower()
 
-# ================================================================
-#  Background: PDF generation + email
-# ================================================================
-def _bg_pdf_email(db_cfg, mail_cfg, template_dir, articles, pub_ids, pdf_folder, settings):
-    """
-    Generate a PDF for each published article by visiting its real URL,
-    update pdf_path in DB, then send email.
+    mapping = {
+        "1 minute": 1,
+        "5 minutes": 5,
+        "10 minutes": 10,
+        "15 minutes": 15,
+        "30 minutes": 30,
+        "45 minutes": 45,
+        "60 minutes": 60,
+        "1 hour": 60,
+        "2 hours": 120,
+        "3 hours": 180,
+        "6 hours": 360,
+        "12 hours": 720,
+        "24 hours": 1440,
+        "daily": 1440,
+    }
 
-    Parameters are plain Python values only.
-    """
+    if interval in mapping:
+        return mapping[interval]
+
     try:
-        from app.pdf_generator import generate_pdf_from_url
-    except ImportError as e:
-        print(f"[BG] Cannot import app.pdf_generator: {e}")
-        traceback.print_exc()
-        generate_pdf_from_url = None
+        return int(interval)
+    except Exception:
+        return None
 
-    pdf_paths = []
 
-    os.makedirs(pdf_folder, exist_ok=True)
-    print(f"[BG] PDF folder ready: {pdf_folder}")
+def _is_due(last_run_at, schedule_dict):
+    if not schedule_dict:
+        return False
 
-    for art, pub_id in zip(articles, pub_ids):
-        news_url = (art.get("news_url") or "").strip()
-        safe_name = f"news_{pub_id}.pdf"
-        out_path = os.path.join(pdf_folder, safe_name)
+    interval_mins = _interval_minutes_from_schedule(schedule_dict)
+    if not interval_mins:
+        return False
 
-        print("=" * 80)
-        print(f"[BG] Starting PDF generation for pub_id={pub_id}")
-        print(f"[BG] Headline : {art.get('news_headline', '')}")
-        print(f"[BG] URL      : {news_url}")
-        print(f"[BG] Output   : {out_path}")
+    if last_run_at is None:
+        return True
 
-        pdf_ok = False
+    return datetime.now() >= (last_run_at + timedelta(minutes=interval_mins))
 
-        if not news_url:
-            print(f"[BG] pub_id={pub_id} has empty news_url. Skipping PDF.")
-        elif not news_url.startswith(("http://", "https://")):
-            print(f"[BG] pub_id={pub_id} has invalid URL: {news_url}")
-        elif generate_pdf_from_url is None:
-            print(f"[BG] pdf_generator import failed for pub_id={pub_id}. Skipping PDF.")
-        else:
+
+def _scheduler_tick(app):
+    with app.app_context():
+        try:
+            db = get_db()
+            cursor = db.cursor(dictionary=True)
+
             try:
-                pdf_ok = generate_pdf_from_url(url=news_url, output_path=out_path)
-                print(f"[BG] generate_pdf_from_url returned {pdf_ok} for pub_id={pub_id}")
-            except Exception as e:
-                print(f"[BG] PDF generation exception for pub_id={pub_id}: {e}")
-                traceback.print_exc()
-                pdf_ok = False
+                cursor.execute("SELECT * FROM user_settings WHERE id=1")
+                settings = cursor.fetchone() or {}
+            except Exception:
+                settings = {}
 
-        if pdf_ok and os.path.exists(out_path):
-            try:
-                size = os.path.getsize(out_path)
-                print(f"[BG] PDF file exists for pub_id={pub_id}, size={size} bytes")
+            if not settings:
+                cursor.close()
+                return
 
-                c = _raw_conn(db_cfg)
-                cur = c.cursor()
-                cur.execute(
-                    "UPDATE published_news SET pdf_path=%s WHERE id=%s",
-                    (safe_name, pub_id),
+            db_cfg = _get_db_cfg()
+            mail_cfg = _get_mail_cfg()
+            template_dir = os.path.join(current_app.root_path, "templates", "main")
+            pdf_folder = current_app.config.get(
+                "PDF_FOLDER",
+                os.path.join(current_app.root_path, "static", "pdfs")
+            )
+
+            publish_mode = settings.get("publish_mode", "manual")
+            content_categories = settings.get("content_categories", "all") or "all"
+            target_cats = [c.strip().lower() for c in content_categories.split(",") if c.strip()]
+
+            sync_all = int(settings.get("sync_all_schedules", 0) or 0)
+
+            schedule_global = _safe_json_load(settings.get("schedule_global"))
+            schedule_all = _safe_json_load(settings.get("schedule_all"))
+            schedule_agri = _safe_json_load(settings.get("schedule_agricultural"))
+            schedule_weather = _safe_json_load(settings.get("schedule_weather"))
+            schedule_financial = _safe_json_load(settings.get("schedule_financial"))
+            schedule_energy = _safe_json_load(settings.get("schedule_energy"))
+
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS scheduler_state (
+                    category_name VARCHAR(100) PRIMARY KEY,
+                    last_run_at DATETIME NULL
                 )
-                c.commit()
-                cur.close()
-                c.close()
+                """
+            )
+            db.commit()
 
-                print(f"[BG] DB updated with pdf_path={safe_name} for pub_id={pub_id}")
-                pdf_paths.append(out_path)
+            def get_last_run(category_name):
+                cursor.execute(
+                    "SELECT last_run_at FROM scheduler_state WHERE category_name=%s",
+                    (category_name,)
+                )
+                row = cursor.fetchone()
+                return row["last_run_at"] if row else None
+
+            def set_last_run(category_name):
+                cursor.execute(
+                    """
+                    INSERT INTO scheduler_state(category_name, last_run_at)
+                    VALUES (%s, NOW())
+                    ON DUPLICATE KEY UPDATE last_run_at=NOW()
+                    """,
+                    (category_name,)
+                )
+                db.commit()
+
+            categories_to_run = []
+
+            if sync_all:
+                last_run = get_last_run("all")
+                if _is_due(last_run, schedule_all):
+                    categories_to_run = ["all"]
+                    set_last_run("all")
+            else:
+                category_map = {
+                    "agricultural": schedule_agri,
+                    "weather": schedule_weather,
+                    "financial": schedule_financial,
+                    "energy": schedule_energy,
+                    "global": schedule_global,
+                }
+
+                for cat_name, sched in category_map.items():
+                    last_run = get_last_run(cat_name)
+                    if _is_due(last_run, sched):
+                        categories_to_run.append(cat_name)
+                        set_last_run(cat_name)
+
+            cursor.close()
+
+            if not categories_to_run:
+                return
+
+            threading.Thread(
+                target=_bg_scraper,
+                args=(db_cfg, current_app.instance_path),
+                kwargs={
+                    "target_categories": categories_to_run if "all" not in categories_to_run else ["all"],
+                    "publish_mode": publish_mode,
+                    "mail_cfg": mail_cfg,
+                    "template_dir": template_dir,
+                    "pdf_folder": pdf_folder,
+                    "settings": dict(settings),
+                },
+                daemon=True,
+            ).start()
 
         except Exception as e:
             print(f"[SCHEDULER] Tick error: {e}")
@@ -1283,42 +256,15 @@ def _bg_pdf_email(db_cfg, mail_cfg, template_dir, articles, pub_ids, pdf_folder,
 
 
 def _scheduler_loop(app):
-    import time
-    print(
-        f"[SCHEDULER] Loop started — "
-        f"ticking every {SCHEDULER_TICK_SECONDS}s."
-    )
+    print(f"[SCHEDULER] Loop started — ticking every {SCHEDULER_TICK_SECONDS}s.")
     while True:
-        time.sleep(SCHEDULER_TICK_SECONDS)   # tick first, then check
+        time.sleep(SCHEDULER_TICK_SECONDS)
         _scheduler_tick(app)
 
 
 def init_scheduler(app):
-    """
-    Call once from create_app() after the app is configured.
-    Starts a single daemon thread for schedule checks.
-
-    Flask's development reloader forks the process — the scheduler
-    must only start in the CHILD (reloader worker) process, not the
-    parent watcher.  We detect this via the WERKZEUG_RUN_MAIN env var:
-      - In production (gunicorn/waitress): WERKZEUG_RUN_MAIN is unset
-        but there is no reloader, so we always start.
-      - In dev with reloader: only start when WERKZEUG_RUN_MAIN == 'true'.
-      - In dev without reloader (--no-reload): always start.
-    """
-    import os as _os
-    # If running under Werkzeug reloader, only start in the child process
-    werkzeug_main = _os.environ.get("WERKZEUG_RUN_MAIN")
-    # werkzeug_main is 'true' in child, None in parent watcher, None in prod
-    # We skip only when it's explicitly the parent watcher (None AND reloader active)
-    # Safest: check if we're the reloader monitor (parent sets no WERKZEUG_RUN_MAIN)
-    # We start in all cases EXCEPT when WERKZEUG_RUN_MAIN is explicitly absent
-    # AND we can detect the reloader is active. Simplest reliable check:
-    if _os.environ.get("WERKZEUG_RUN_MAIN") == "false":
-        # Explicit parent watcher — skip
-        return
-
     global _scheduler_started
+
     with _scheduler_lock:
         if _scheduler_started:
             return
@@ -1330,12 +276,12 @@ def init_scheduler(app):
 
 
 # ════════════════════════════════════════════════════════════════
-#  EMAIL HELPERS
+# EMAIL HELPERS
 # ════════════════════════════════════════════════════════════════
 
 def _render_email_template(template_dir: str, news_items: list, date_label: str) -> str:
     from jinja2 import Environment, FileSystemLoader
-    env  = Environment(loader=FileSystemLoader(template_dir))
+    env = Environment(loader=FileSystemLoader(template_dir))
     tmpl = env.get_template("email_template.html")
     return tmpl.render(news_items=news_items, date_label=date_label)
 
@@ -1351,15 +297,15 @@ def _smtp_send(mail_cfg: dict, msg, recipients: list):
 
 
 def _send_email_bg(articles, pub_ids, pdf_paths, settings, mail_cfg, template_dir):
-    to         = settings.get("email_recipient") or "niyati.b@seamlessautomations.com"
-    cc_raw     = settings.get("email_cc") or ""
-    cc         = [e.strip() for e in cc_raw.split(",") if e.strip()]
-    pfx        = settings.get("email_subject_prefix") or "Daily News Alert"
-    mode       = settings.get("publish_mode", "manual")
+    to = settings.get("email_recipient") or "niyati.b@seamlessautomations.com"
+    cc_raw = settings.get("email_cc") or ""
+    cc = [e.strip() for e in cc_raw.split(",") if e.strip()]
+    pfx = settings.get("email_subject_prefix") or "Daily News Alert"
+    mode = settings.get("publish_mode", "manual")
     date_label = datetime.now().strftime("%d %B %Y")
 
     if mode == "auto":
-        base  = mail_cfg.get("BASE_URL", "http://127.0.0.1:5000")
+        base = mail_cfg.get("BASE_URL", "http://127.0.0.1:5000")
         items = [
             dict(a, pdf_view_url=f"{base}/download-pdf/{pid}")
             for a, pid in zip(articles, pub_ids)
@@ -1368,12 +314,12 @@ def _send_email_bg(articles, pub_ids, pdf_paths, settings, mail_cfg, template_di
     else:
         html_body = _render_email_template(template_dir, list(articles), date_label)
 
-    msg            = MIMEMultipart("mixed")
+    msg = MIMEMultipart("mixed")
     msg["Subject"] = f"{pfx} — {date_label}"
-    msg["From"]    = mail_cfg.get("MAIL_FROM", mail_cfg.get("MAIL_USERNAME", ""))
-    msg["To"]      = to
+    msg["From"] = mail_cfg.get("MAIL_FROM", mail_cfg.get("MAIL_USERNAME", ""))
+    msg["To"] = to
     if cc:
-        msg["Cc"]  = ", ".join(cc)
+        msg["Cc"] = ", ".join(cc)
 
     msg.attach(MIMEText(html_body, "html", "utf-8"))
 
@@ -1393,11 +339,182 @@ def _send_email_bg(articles, pub_ids, pdf_paths, settings, mail_cfg, template_di
     _smtp_send(mail_cfg, msg, [to] + cc)
 
 
-# ================================================================
-#  Background scraper
-# ================================================================
-def _bg_scraper(db_cfg: dict, instance_path: str):
+# ════════════════════════════════════════════════════════════════
+# BACKGROUND: PDF GENERATION + EMAIL
+# ════════════════════════════════════════════════════════════════
+
+def _bg_pdf_email(db_cfg, mail_cfg, template_dir, articles, pub_ids, pdf_folder, settings, pdf_workers=3):
+    """
+    Generate PDF from DATABASE article content,
+    update pdf_path in DB, then send email.
+    """
+    import sys
+    
+    # IMMEDIATE logging - test if thread even starts
+    print(f"[BG] THREAD STARTED - articles type: {type(articles)}, count: {len(articles)}", flush=True)
+    sys.stderr.write(f"[BG] STDERR: THREAD STARTED\n")
+    sys.stderr.flush()
+    
+    # Ensure stdout is flushed immediately for debugging
+    print(f"[BG] PDF+EMAIL thread started with {len(articles)} articles", flush=True)
+    
+    # Check first article type
+    if articles:
+        first_art = articles[0]
+        print(f"[BG] First article type: {type(first_art)}", flush=True)
+        if isinstance(first_art, (tuple, list)):
+            print(f"[BG] WARNING: articles are tuples/lists, not converting (cursor.fetchall with dictionary=True should have returned dicts)", flush=True)
+        elif isinstance(first_art, dict):
+            print(f"[BG] ✓ First article is dict with keys: {list(first_art.keys())[:5]}", flush=True)
+    
+    try:
+        from app.pdf_generator import generate_pdf_from_article
+        print(f"[BG] Successfully imported pdf_generator", flush=True)
+    except ImportError as e:
+        print(f"[BG] Cannot import app.pdf_generator: {e}", flush=True)
+        traceback.print_exc()
+        generate_pdf_from_article = None
+
+    pdf_paths = []
+
+    os.makedirs(pdf_folder, exist_ok=True)
+    print(f"[BG] PDF folder ready: {pdf_folder}", flush=True)
+
+    def _generate_and_store_pdf(article, pub_id):
+        safe_name = f"news_{pub_id}.pdf"
+        out_path = os.path.join(pdf_folder, safe_name)
+
+        print("=" * 80, flush=True)
+        print(f"[BG] Starting PDF generation for pub_id={pub_id}", flush=True)
+        
+        # Validate article data structure
+        if not isinstance(article, dict):
+            print(f"[BG ERROR] article is not a dict: {type(article)}", flush=True)
+            return None
+        
+        required_keys = ['news_headline', 'news_text', 'news_type', 'news_url', 'keywords']
+        missing_keys = [k for k in required_keys if k not in article]
+        if missing_keys:
+            print(f"[BG WARNING] Missing keys in article: {missing_keys}", flush=True)
+            print(f"[BG] Available keys: {list(article.keys())}", flush=True)
+        
+        headline = article.get('news_headline', 'Untitled')
+        print(f"[BG] Headline     : {str(headline)[:60]}", flush=True)
+        print(f"[BG] Text length  : {len(str(article.get('news_text', '')))} chars", flush=True)
+        print(f"[BG] Output path  : {out_path}", flush=True)
+
+        pdf_ok = False
+
+        if generate_pdf_from_article is None:
+            print(f"[BG] pdf_generator import failed for pub_id={pub_id}. Skipping PDF.", flush=True)
+        else:
+            try:
+                pdf_ok = generate_pdf_from_article(article_data=article, output_path=out_path)
+                print(f"[BG] generate_pdf_from_article returned {pdf_ok} for pub_id={pub_id}", flush=True)
+            except Exception as e:
+                print(f"[BG] PDF generation exception for pub_id={pub_id}: {type(e).__name__}: {e}", flush=True)
+                traceback.print_exc()
+                pdf_ok = False
+
+        if pdf_ok and os.path.exists(out_path):
+            try:
+                size = os.path.getsize(out_path)
+                print(f"[BG] PDF file exists for pub_id={pub_id}, size={size} bytes", flush=True)
+
+                c = _raw_conn(db_cfg)
+                cur = c.cursor()
+                cur.execute(
+                    "UPDATE published_news SET pdf_path=%s WHERE id=%s",
+                    (safe_name, pub_id),
+                )
+                c.commit()
+                cur.close()
+                c.close()
+
+                print(f"[BG] DB updated with pdf_path={safe_name} for pub_id={pub_id}", flush=True)
+                return out_path
+
+            except Exception as e:
+                print(f"[BG] DB update failed for pub_id={pub_id}: {e}", flush=True)
+                traceback.print_exc()
+                return None
+        else:
+            print(f"[BG] PDF failed for pub_id={pub_id}", flush=True)
+            return None
+
+    try:
+        if pdf_workers and pdf_workers > 1 and len(articles) > 1:
+            print(f"[BG] Generating {len(articles)} PDFs with {pdf_workers} workers", flush=True)
+            with concurrent.futures.ThreadPoolExecutor(max_workers=pdf_workers) as executor:
+                futures = [executor.submit(_generate_and_store_pdf, art, pid)
+                           for art, pid in zip(articles, pub_ids)]
+                for future in concurrent.futures.as_completed(futures):
+                    try:
+                        pdf_paths.append(future.result())
+                    except Exception as e:
+                        print(f"[BG] PDF task failed: {e}", flush=True)
+                        traceback.print_exc()
+                        pdf_paths.append(None)
+        else:
+            print(f"[BG] Generating {len(articles)} PDFs sequentially", flush=True)
+            for art, pid in zip(articles, pub_ids):
+                pdf_paths.append(_generate_and_store_pdf(art, pid))
+
+        if not settings.get("email_on_publish", 1):
+            print("[BG] email_on_publish=0 — skipping email.", flush=True)
+            return
+
+        try:
+            _send_email_bg(
+                articles=articles,
+                pub_ids=pub_ids,
+                pdf_paths=pdf_paths,
+                settings=settings,
+                mail_cfg=mail_cfg,
+                template_dir=template_dir,
+            )
+        except Exception as e:
+            print(f"[BG] Email send failed: {e}", flush=True)
+            traceback.print_exc()
+            return
+
+        try:
+            c = _raw_conn(db_cfg)
+            cur = c.cursor()
+            for pid in pub_ids:
+                cur.execute(
+                    "UPDATE published_news SET email_sent=1, email_sent_at=NOW() WHERE id=%s",
+                    (pid,),
+                )
+            c.commit()
+            cur.close()
+            c.close()
+            print(f"[BG] email_sent marked for {len(pub_ids)} articles.", flush=True)
+        except Exception as e:
+            print(f"[BG] Mark email_sent error: {e}", flush=True)
+            traceback.print_exc()
+
+    except Exception as outer_e:
+        print(f"[BG] FATAL ERROR in PDF+EMAIL thread: {type(outer_e).__name__}: {outer_e}", flush=True)
+        traceback.print_exc()
+
+
+# ════════════════════════════════════════════════════════════════
+# BACKGROUND SCRAPER
+# ════════════════════════════════════════════════════════════════
+
+def _bg_scraper(
+    db_cfg: dict,
+    instance_path: str,
+    target_categories=None,
+    publish_mode="manual",
+    mail_cfg=None,
+    template_dir=None,
+    pdf_folder=None,
+    settings=None,
+):
     global _scraper_state
+
     with _scraper_lock:
         _scraper_state.update(
             {"running": True, "message": "Scraper running…", "success": None}
@@ -1406,7 +523,51 @@ def _bg_scraper(db_cfg: dict, instance_path: str):
     try:
         from app.news_scraper import run_news_scraper
 
-        result = run_news_scraper(db_config=db_cfg, instance_path=instance_path)
+        result = run_news_scraper(
+            db_config=db_cfg,
+            instance_path=instance_path,
+            target_categories=target_categories,
+            publish_mode=publish_mode,
+        )
+
+        if publish_mode == "auto":
+            try:
+                c = _raw_conn(db_cfg)
+                cur = c.cursor(dictionary=True)
+
+                today = date.today()
+                cur.execute(
+                    """
+                    SELECT id, source_id, news_date, news_type, news_headline,
+                           news_text, news_url, keywords, date_of_insert, published_at, pdf_path
+                    FROM published_news
+                    WHERE DATE(published_at)=%s
+                      AND (email_sent IS NULL OR email_sent=0)
+                    ORDER BY published_at DESC
+                    """,
+                    (today,)
+                )
+                articles = cur.fetchall()
+                cur.close()
+                c.close()
+
+                if articles and mail_cfg and template_dir and pdf_folder:
+                    pub_ids = [a["id"] for a in articles]
+
+                    _bg_pdf_email(
+                        db_cfg=db_cfg,
+                        mail_cfg=mail_cfg,
+                        template_dir=template_dir,
+                        articles=list(articles),
+                        pub_ids=pub_ids,
+                        pdf_folder=pdf_folder,
+                        settings=dict(settings or {}),
+                        pdf_workers=current_app.config.get("PDF_WORKERS", 3),
+                    )
+            except Exception as e:
+                print(f"[SCRAPER] Auto publish PDF/email follow-up error: {e}")
+                traceback.print_exc()
+
         with _scraper_lock:
             _scraper_state.update(
                 {
@@ -1414,6 +575,7 @@ def _bg_scraper(db_cfg: dict, instance_path: str):
                     "message": result.get("message", "Scraper finished."),
                 }
             )
+
     except Exception as e:
         with _scraper_lock:
             _scraper_state.update({"success": False, "message": f"Scraper error: {e}"})
@@ -1423,14 +585,62 @@ def _bg_scraper(db_cfg: dict, instance_path: str):
             _scraper_state["running"] = False
 
 
-# ================================================================
-#  Routes
-# ================================================================
+# ════════════════════════════════════════════════════════════════
+# ROUTES
+# ════════════════════════════════════════════════════════════════
+
 @main_bp.route("/")
 def index():
     return render_template("main/landing.html")
 
-# for agriculture trends
+
+def get_weather_overview(temp, humidity, wind, desc):
+    wind_status = "Breezy" if wind > 5.0 else "Calm"
+    precip_status = "Rain likely" if "rain" in desc.lower() else "Dry"
+
+    impacts = (
+        "Hazardous for spraying or sensitive tasks."
+        if wind > 5.0 or "rain" in desc.lower()
+        else "Ideal for field work."
+    )
+
+    overview = (
+        f"* ADVISORY: {desc.upper()} in effect.\n"
+        f"* WHAT: Temp {temp}°C with {humidity}% humidity.\n"
+        f"* WIND: {wind_status} ({wind} m/s).\n"
+        f"* IMPACTS: {precip_status} conditions. {impacts}"
+    )
+    return overview
+
+
+@main_bp.route("/agri-dashboard")
+@login_required
+def agri_dashboard():
+    weather_api_key = "2baab2dc7ad18ffef8b81c014e893e1c"
+    weather_url = f"https://api.openweathermap.org/data/2.5/weather?q=Thane&units=metric&appid={weather_api_key}"
+
+    weather_data = {"temp": "--", "desc": "Offline", "location": "Thane", "humidity": "--"}
+    try:
+        w_res = requests.get(weather_url, timeout=3).json()
+        if w_res.get("main"):
+            weather_data = {
+                "temp": round(w_res["main"]["temp"]),
+                "desc": w_res["weather"][0]["description"].capitalize(),
+                "location": w_res["name"],
+                "humidity": w_res["main"]["humidity"]
+            }
+    except Exception:
+        pass
+
+    commodities = [
+        {"name": "Onion", "price": "2,450", "unit": "Quintal", "trend": "up"},
+        {"name": "Cotton", "price": "7,100", "unit": "Quintal", "trend": "down"},
+        {"name": "Sugarcane", "price": "315", "unit": "Ton", "trend": "up"}
+    ]
+
+    return render_template("main/agri_dashboard.html", weather=weather_data, commodities=commodities)
+
+
 def to_float(value):
     try:
         if value in (None, "", "N/A", "-"):
@@ -1439,7 +649,7 @@ def to_float(value):
     except Exception:
         return None
 
-# for agriculture trends
+
 def get_recent_months(year_str, month_str, count=6):
     months = []
     year_num = int(year_str)
@@ -1455,15 +665,12 @@ def get_recent_months(year_str, month_str, count=6):
     months.reverse()
     return months
 
-# for agriculture trends
+
 def build_sparkline_points(values, width=220, height=52, padding=6):
     clean_values = [v for v in values if v is not None]
 
     if not clean_values:
-        return {
-            "line_points": "",
-            "fill_points": "",
-        }
+        return {"line_points": "", "fill_points": ""}
 
     if len(values) == 1:
         values = [values[0], values[0]]
@@ -1491,10 +698,8 @@ def build_sparkline_points(values, width=220, height=52, padding=6):
     base_y = height - padding
     fill_points = f"{points[0][0]},{base_y} " + line_points + f" {points[-1][0]},{base_y}"
 
-    return {
-        "line_points": line_points,
-        "fill_points": fill_points,
-    }
+    return {"line_points": line_points, "fill_points": fill_points}
+
 
 def fetch_month_average_for_crop(crop_id, year_num, month_num, agmark_headers, month_names):
     try:
@@ -1531,12 +736,12 @@ def fetch_month_average_for_crop(crop_id, year_num, month_num, agmark_headers, m
         print(f"Month average fetch error for crop_id={crop_id}, {month_num}/{year_num}: {e}")
         return None
 
+
 @main_bp.route("/home")
 @login_required
 def home():
     api_key = "2baab2dc7ad18ffef8b81c014e893e1c"
 
-    # 1. PARAMETER CAPTURE
     search_query = request.args.get("city_search", "").strip()
 
     current_year = datetime.now().year
@@ -1549,33 +754,15 @@ def home():
     year_options = [str(current_year - 2), str(current_year - 1), str(current_year)]
 
     month_names = {
-        1: "january",
-        2: "february",
-        3: "march",
-        4: "april",
-        5: "may",
-        6: "june",
-        7: "july",
-        8: "august",
-        9: "september",
-        10: "october",
-        11: "november",
-        12: "december",
+        1: "january", 2: "february", 3: "march", 4: "april",
+        5: "may", 6: "june", 7: "july", 8: "august",
+        9: "september", 10: "october", 11: "november", 12: "december",
     }
 
     month_short = {
-        "1": "Jan",
-        "2": "Feb",
-        "3": "Mar",
-        "4": "Apr",
-        "5": "May",
-        "6": "Jun",
-        "7": "Jul",
-        "8": "Aug",
-        "9": "Sep",
-        "10": "Oct",
-        "11": "Nov",
-        "12": "Dec",
+        "1": "Jan", "2": "Feb", "3": "Mar", "4": "Apr",
+        "5": "May", "6": "Jun", "7": "Jul", "8": "Aug",
+        "9": "Sep", "10": "Oct", "11": "Nov", "12": "Dec",
     }
 
     def get_previous_month_year(month_str, year_str):
@@ -1597,7 +784,6 @@ def home():
         ),
     }
 
-    # 2. WEATHER LOGIC (ONLY SEARCHED CITY)
     weather_card = {
         "location": "Search City",
         "temp": "--",
@@ -1663,7 +849,6 @@ def home():
                 "overview": "Something went wrong while fetching weather data."
             })
 
-    # 3. COMMODITY DROPDOWN LOGIC (FROM AGMARKNET API)
     all_options = []
     try:
         commodity_url = "https://api.agmarknet.gov.in/v1/dashboard-commodities-filter"
@@ -1727,14 +912,6 @@ def home():
 
     featured_cards = []
 
-    def to_float(value):
-        try:
-            if value in (None, "", "N/A", "-"):
-                return None
-            return float(str(value).replace(",", "").replace("₹", "").strip())
-        except Exception:
-            return None
-
     def build_featured_card(crop_name, crop_id):
         try:
             recent_months = get_recent_months(selected_year, selected_month, count=6)
@@ -1783,14 +960,8 @@ def home():
             return None
 
     featured_crop_names = [
-        "Rice",
-        "Wheat",
-        "Maize",
-        "Soyabean",
-        "Cotton",
-        "Groundnut",
-        "Onion",
-        "Sugarcane",
+        "Rice", "Wheat", "Maize", "Soyabean",
+        "Cotton", "Groundnut", "Onion", "Sugarcane",
     ]
 
     featured_lookup = {item["cmdt_name"].strip().lower(): item["id"] for item in all_options}
@@ -1802,11 +973,10 @@ def home():
             if card:
                 featured_cards.append(card)
 
-    # 4. COMMODITY PRICE API LOGIC
     state_data = []
     cmdt_title = ""
     current_price_label = ""
-    previous_price_label = ""    
+    previous_price_label = ""
     commodity_summary = {
         "commodity_name": "",
         "avg_price": "N/A",
@@ -1849,10 +1019,7 @@ def home():
             cmdt_title = data.get("title", "Price Analysis") if isinstance(data, dict) else "Price Analysis"
 
             if not cmdt_title:
-                selected_item = next(
-                    (item for item in all_options if item["id"] == selected_id),
-                    None
-                )
+                selected_item = next((item for item in all_options if item["id"] == selected_id), None)
                 cmdt_title = selected_item["cmdt_name"] if selected_item else "Price Analysis"
 
             normalized_rows = []
@@ -1868,14 +1035,6 @@ def home():
                 })
 
             state_data = normalized_rows
-
-            def to_float(value):
-                try:
-                    if value in (None, "", "N/A", "-"):
-                        return None
-                    return float(str(value).replace(",", "").replace("₹", "").strip())
-                except Exception:
-                    return None
 
             if state_data:
                 price_rows = []
@@ -1911,13 +1070,12 @@ def home():
                 if change_values:
                     avg_change = sum(change_values) / len(change_values)
                     commodity_summary["avg_change"] = f"{avg_change:.1f}"
+
             print(f"DEBUG: Received {len(state_data)} rows from Agmarknet")
 
         except Exception as e:
             print(f"Agmarknet API Error: {e}")
 
-
-    # 5. DATABASE LOGIC (PENDING NEWS)
     pending_count = 0
     recent_news = []
 
@@ -1940,7 +1098,6 @@ def home():
         except Exception:
             pass
 
-    # 6. RENDER TEMPLATE
     return render_template(
         "main/home.html",
         weather_card=weather_card,
@@ -1960,17 +1117,24 @@ def home():
         featured_cards=featured_cards
     )
 
-# ── Keywords ──────────────────────────────────────────────────
+
+# ════════════════════════════════════════════════════════════════
+# KEYWORDS
+# ════════════════════════════════════════════════════════════════
+
 @main_bp.route("/view-keywords", methods=["GET", "POST"])
 @login_required
 def view_keywords():
     db = get_db()
     cursor = db.cursor(dictionary=True)
+
     if request.method == "POST":
         action = request.form.get("action")
+
         if action == "add":
             sr_no = request.form.get("sr_no", "").strip()
-            kw    = request.form.get("keyword", "").strip()
+            kw = request.form.get("keyword", "").strip()
+
             if not sr_no or not kw:
                 flash("Both Sr. No and Keyword are required.", "danger")
             else:
@@ -1981,7 +1145,7 @@ def view_keywords():
                         flash("Sr. No already exists.", "danger")
                     else:
                         cursor.execute(
-                            "INSERT INTO keywords(sr_no,keyword) VALUES(%s,%s)",
+                            "INSERT INTO keywords(sr_no, keyword) VALUES(%s, %s)",
                             (sr_no, kw)
                         )
                         db.commit()
@@ -1991,11 +1155,14 @@ def view_keywords():
                 except Exception as e:
                     db.rollback()
                     flash(f"Error: {e}", "danger")
+
             cursor.close()
             return redirect(url_for("main.view_keywords"))
+
         elif action == "edit":
             kid = request.form.get("keyword_id", "").strip()
-            kw  = request.form.get("edit_keyword", "").strip()
+            kw = request.form.get("edit_keyword", "").strip()
+
             if not kid or not kw:
                 flash("Keyword ID and value required.", "danger")
             else:
@@ -2007,8 +1174,10 @@ def view_keywords():
                 except Exception as e:
                     db.rollback()
                     flash(f"Error: {e}", "danger")
+
             cursor.close()
             return redirect(url_for("main.view_keywords"))
+
         elif action == "bulk_delete":
             ids = request.form.getlist("selected_keywords")
             if not ids:
@@ -2022,25 +1191,33 @@ def view_keywords():
                 except Exception as e:
                     db.rollback()
                     flash(f"Error: {e}", "danger")
+
             cursor.close()
             return redirect(url_for("main.view_keywords"))
-    cursor.execute("SELECT id,sr_no,keyword FROM keywords ORDER BY sr_no ASC")
+
+    cursor.execute("SELECT id, sr_no, keyword FROM keywords ORDER BY sr_no ASC")
     keywords = cursor.fetchall()
     cursor.close()
     return render_template("main/view_keywords.html", keywords=keywords)
 
 
-# ── Websites ───────────────────────────────────────────────────
+# ════════════════════════════════════════════════════════════════
+# WEBSITES
+# ════════════════════════════════════════════════════════════════
+
 @main_bp.route("/view-websites", methods=["GET", "POST"])
 @login_required
 def view_websites():
     db = get_db()
     cursor = db.cursor(dictionary=True)
+
     if request.method == "POST":
         action = request.form.get("action")
+
         if action == "add":
             sr_no = request.form.get("sr_no", "").strip()
-            val   = request.form.get("websites", "").strip()
+            val = request.form.get("websites", "").strip()
+
             if not sr_no or not val:
                 flash("Both fields required.", "danger")
             else:
@@ -2051,7 +1228,7 @@ def view_websites():
                         flash("Sr. No exists.", "danger")
                     else:
                         cursor.execute(
-                            "INSERT INTO websites(sr_no,websites) VALUES(%s,%s)",
+                            "INSERT INTO websites(sr_no, websites) VALUES(%s, %s)",
                             (sr_no, val)
                         )
                         db.commit()
@@ -2061,11 +1238,14 @@ def view_websites():
                 except Exception as e:
                     db.rollback()
                     flash(f"Error: {e}", "danger")
+
             cursor.close()
             return redirect(url_for("main.view_websites"))
+
         elif action == "edit":
             wid = request.form.get("websites_id", "").strip()
             val = request.form.get("edit_websites", "").strip()
+
             if not wid or not val:
                 flash("Both fields required.", "danger")
             else:
@@ -2077,8 +1257,10 @@ def view_websites():
                 except Exception as e:
                     db.rollback()
                     flash(f"Error: {e}", "danger")
+
             cursor.close()
             return redirect(url_for("main.view_websites"))
+
         elif action == "bulk_delete":
             ids = request.form.getlist("selected_websites")
             if not ids:
@@ -2092,25 +1274,33 @@ def view_websites():
                 except Exception as e:
                     db.rollback()
                     flash(f"Error: {e}", "danger")
+
             cursor.close()
             return redirect(url_for("main.view_websites"))
-    cursor.execute("SELECT id,sr_no,websites FROM websites ORDER BY sr_no ASC")
+
+    cursor.execute("SELECT id, sr_no, websites FROM websites ORDER BY sr_no ASC")
     websites = cursor.fetchall()
     cursor.close()
     return render_template("main/view_websites.html", websites=websites)
 
 
-# ── News Type ──────────────────────────────────────────────────
+# ════════════════════════════════════════════════════════════════
+# NEWS TYPE
+# ════════════════════════════════════════════════════════════════
+
 @main_bp.route("/view-news-type", methods=["GET", "POST"])
 @login_required
 def view_news_type():
     db = get_db()
     cursor = db.cursor(dictionary=True)
+
     if request.method == "POST":
         action = request.form.get("action")
+
         if action == "add":
             sr_no = request.form.get("sr_no", "").strip()
-            val   = request.form.get("news_type", "").strip()
+            val = request.form.get("news_type", "").strip()
+
             if not sr_no or not val:
                 flash("Both fields required.", "danger")
             else:
@@ -2121,7 +1311,7 @@ def view_news_type():
                         flash("Sr. No exists.", "danger")
                     else:
                         cursor.execute(
-                            "INSERT INTO news(sr_no,news_type) VALUES(%s,%s)",
+                            "INSERT INTO news(sr_no, news_type) VALUES(%s, %s)",
                             (sr_no, val)
                         )
                         db.commit()
@@ -2131,11 +1321,14 @@ def view_news_type():
                 except Exception as e:
                     db.rollback()
                     flash(f"Error: {e}", "danger")
+
             cursor.close()
             return redirect(url_for("main.view_news_type"))
+
         elif action == "edit":
             ntid = request.form.get("news_type_id", "").strip()
-            val  = request.form.get("edit_news_type", "").strip()
+            val = request.form.get("edit_news_type", "").strip()
+
             if not ntid or not val:
                 flash("Both fields required.", "danger")
             else:
@@ -2147,8 +1340,10 @@ def view_news_type():
                 except Exception as e:
                     db.rollback()
                     flash(f"Error: {e}", "danger")
+
             cursor.close()
             return redirect(url_for("main.view_news_type"))
+
         elif action == "bulk_delete":
             ids = request.form.getlist("selected_news_types")
             if not ids:
@@ -2162,25 +1357,33 @@ def view_news_type():
                 except Exception as e:
                     db.rollback()
                     flash(f"Error: {e}", "danger")
+
             cursor.close()
             return redirect(url_for("main.view_news_type"))
-    cursor.execute("SELECT id,sr_no,news_type FROM news ORDER BY sr_no ASC")
+
+    cursor.execute("SELECT id, sr_no, news_type FROM news ORDER BY sr_no ASC")
     news_types = cursor.fetchall()
     cursor.close()
     return render_template("main/view_news_type.html", news_types=news_types)
 
 
-# ── Commodity ──────────────────────────────────────────────────
+# ════════════════════════════════════════════════════════════════
+# COMMODITY
+# ════════════════════════════════════════════════════════════════
+
 @main_bp.route("/view-commodity", methods=["GET", "POST"])
 @login_required
 def view_commodity():
     db = get_db()
     cursor = db.cursor(dictionary=True)
+
     if request.method == "POST":
         action = request.form.get("action")
+
         if action == "add":
             sr_no = request.form.get("sr_no", "").strip()
-            val   = request.form.get("commodity", "").strip()
+            val = request.form.get("commodity", "").strip()
+
             if not sr_no or not val:
                 flash("Both fields required.", "danger")
             else:
@@ -2191,7 +1394,7 @@ def view_commodity():
                         flash("Sr. No exists.", "danger")
                     else:
                         cursor.execute(
-                            "INSERT INTO commodity(sr_no,commodity) VALUES(%s,%s)",
+                            "INSERT INTO commodity(sr_no, commodity) VALUES(%s, %s)",
                             (sr_no, val)
                         )
                         db.commit()
@@ -2201,11 +1404,14 @@ def view_commodity():
                 except Exception as e:
                     db.rollback()
                     flash(f"Error: {e}", "danger")
+
             cursor.close()
             return redirect(url_for("main.view_commodity"))
+
         elif action == "edit":
             cid = request.form.get("commodity_id", "").strip()
             val = request.form.get("edit_commodity", "").strip()
+
             if not cid or not val:
                 flash("Both fields required.", "danger")
             else:
@@ -2217,8 +1423,10 @@ def view_commodity():
                 except Exception as e:
                     db.rollback()
                     flash(f"Error: {e}", "danger")
+
             cursor.close()
             return redirect(url_for("main.view_commodity"))
+
         elif action == "bulk_delete":
             ids = request.form.getlist("selected_commodities")
             if not ids:
@@ -2232,16 +1440,18 @@ def view_commodity():
                 except Exception as e:
                     db.rollback()
                     flash(f"Error: {e}", "danger")
+
             cursor.close()
             return redirect(url_for("main.view_commodity"))
-    cursor.execute("SELECT id,sr_no,commodity FROM commodity ORDER BY sr_no ASC")
+
+    cursor.execute("SELECT id, sr_no, commodity FROM commodity ORDER BY sr_no ASC")
     commodities = cursor.fetchall()
     cursor.close()
     return render_template("main/view_commodity.html", commodities=commodities)
 
 
 # ════════════════════════════════════════════════════════════════
-#  ALL NON-PUBLISHED NEWS
+# ALL NON-PUBLISHED NEWS
 # ════════════════════════════════════════════════════════════════
 
 @main_bp.route("/all-non-published-news")
@@ -2257,14 +1467,12 @@ def all_non_published_news():
         settings = {}
 
     cats_str = settings.get("content_categories", "all") or "all"
-    cats     = [c.strip().lower() for c in cats_str.split(",") if c.strip()]
-    page     = max(1, int(request.args.get("page", 1)))
+    cats = [c.strip().lower() for c in cats_str.split(",") if c.strip()]
+    page = max(1, int(request.args.get("page", 1)))
 
     try:
         if "all" in cats:
-            cursor.execute(
-                "SELECT COUNT(*) AS cnt FROM non_published_news WHERE published=0"
-            )
+            cursor.execute("SELECT COUNT(*) AS cnt FROM non_published_news WHERE published=0")
         else:
             ph = ",".join(["%s"] * len(cats))
             cursor.execute(
@@ -2272,15 +1480,16 @@ def all_non_published_news():
                 f"WHERE published=0 AND LOWER(news_type) IN ({ph})",
                 tuple(cats)
             )
+
         total = cursor.fetchone()["cnt"]
         total_pages = max(1, (total + PER_PAGE - 1) // PER_PAGE)
-        page   = min(page, total_pages)
+        page = min(page, total_pages)
         offset = (page - 1) * PER_PAGE
 
         if "all" in cats:
             cursor.execute(
-                "SELECT id,news_date,news_type,news_headline,"
-                "news_text,news_url,keywords,date_of_insert "
+                "SELECT id, news_date, news_type, news_headline, "
+                "news_text, news_url, keywords, date_of_insert "
                 "FROM non_published_news WHERE published=0 "
                 "ORDER BY date_of_insert DESC LIMIT %s OFFSET %s",
                 (PER_PAGE, offset)
@@ -2288,13 +1497,14 @@ def all_non_published_news():
         else:
             ph = ",".join(["%s"] * len(cats))
             cursor.execute(
-                f"SELECT id,news_date,news_type,news_headline,"
-                f"news_text,news_url,keywords,date_of_insert "
+                f"SELECT id, news_date, news_type, news_headline, "
+                f"news_text, news_url, keywords, date_of_insert "
                 f"FROM non_published_news WHERE published=0 "
                 f"AND LOWER(news_type) IN ({ph}) "
                 f"ORDER BY date_of_insert DESC LIMIT %s OFFSET %s",
                 tuple(cats) + (PER_PAGE, offset)
             )
+
         news = cursor.fetchall()
 
     except Exception as e:
@@ -2318,7 +1528,7 @@ def all_non_published_news():
 
 
 # ════════════════════════════════════════════════════════════════
-#  ALL NON-PUBLISHED NEWS — POST ACTIONS
+# ALL NON-PUBLISHED NEWS — POST ACTIONS
 # ════════════════════════════════════════════════════════════════
 
 @main_bp.route("/all-non-published-news/actions", methods=["POST"])
@@ -2327,7 +1537,7 @@ def all_non_published_news_actions():
     db = get_db()
     cursor = db.cursor(dictionary=True)
     action = request.form.get("action")
-    ids    = request.form.getlist("selected_news")
+    ids = request.form.getlist("selected_news")
 
     if not ids:
         flash("Please select at least one article.", "warning")
@@ -2371,46 +1581,65 @@ def all_non_published_news_actions():
             )
             os.makedirs(pdf_folder, exist_ok=True)
 
-            now     = datetime.now()
+            now = datetime.now()
             pub_ids = []
 
-            # Insert all into published_news immediately
             for art in articles:
                 cursor.execute(
                     "INSERT INTO published_news "
                     "(source_id, news_date, news_type, news_headline, "
                     "news_text, news_url, keywords, date_of_insert, published_at) "
-                    "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
                     (
-                        art["id"], art["news_date"], art["news_type"],
-                        art["news_headline"], art["news_text"], art["news_url"],
-                        art["keywords"], art["date_of_insert"], now,
+                        art["id"],
+                        art["news_date"],
+                        art["news_type"],
+                        art["news_headline"],
+                        art["news_text"],
+                        art["news_url"],
+                        art["keywords"],
+                        art["date_of_insert"],
+                        now,
                     )
                 )
                 db.commit()
                 pub_ids.append(cursor.lastrowid)
 
-            # Delete from non_published_news immediately
             cursor.execute(
                 f"DELETE FROM non_published_news WHERE id IN ({ph})",
                 tuple(ids)
             )
             db.commit()
 
-            db_cfg       = _get_db_cfg()
-            mail_cfg     = _get_mail_cfg()
+            db_cfg = _get_db_cfg()
+            mail_cfg = _get_mail_cfg()
             template_dir = os.path.join(current_app.root_path, "templates", "main")
+            pdf_workers = current_app.config.get("PDF_WORKERS", 3)  # Evaluate BEFORE thread
+
+            def _thread_wrapper():
+                try:
+                    _bg_pdf_email(
+                        db_cfg,
+                        mail_cfg,
+                        template_dir,
+                        list(articles),
+                        list(pub_ids),
+                        pdf_folder,
+                        dict(settings),
+                        pdf_workers,  # Pass as variable, not current_app.config
+                    )
+                except Exception as thread_error:
+                    print(f"[THREAD ERROR] {type(thread_error).__name__}: {thread_error}", flush=True)
+                    traceback.print_exc()
 
             threading.Thread(
-                target=_bg_pdf_email,
-                args=(db_cfg, mail_cfg, template_dir,
-                      list(articles), list(pub_ids), pdf_folder, dict(settings)),
+                target=_thread_wrapper,
                 daemon=True,
             ).start()
 
             flash(
                 f"{len(articles)} article(s) published successfully! "
-                f"PDFs are being generated in the background.",
+                f"PDFs are being generated from saved database content in the background.",
                 "success",
             )
 
@@ -2425,21 +1654,17 @@ def all_non_published_news_actions():
 
 
 # ════════════════════════════════════════════════════════════════
-#  REFRESH NEWS  (manual trigger from Non-Published page)
-#  ── Behaviour identical to original; now also passes categories
-#     and publish_mode so auto-publish works from the button too.
+# REFRESH NEWS
 # ════════════════════════════════════════════════════════════════
 
 @main_bp.route("/refresh-news", methods=["POST"])
 @login_required
 def refresh_news():
-    # Block if already running
     with _scraper_lock:
         if _scraper_state["running"]:
             flash("Scraper is already running.", "warning")
             return redirect(url_for("main.all_non_published_news"))
 
-    # Load settings to pick up category selection and publish mode
     db = get_db()
     cursor = db.cursor(dictionary=True)
     try:
@@ -2450,18 +1675,18 @@ def refresh_news():
     finally:
         cursor.close()
 
-    cats_str     = settings.get("content_categories", "all") or "all"
-    target_cats  = [c.strip().lower() for c in cats_str.split(",") if c.strip()]
+    cats_str = settings.get("content_categories", "all") or "all"
+    target_cats = [c.strip().lower() for c in cats_str.split(",") if c.strip()]
     publish_mode = settings.get("publish_mode", "manual")
 
-    db_cfg        = _get_db_cfg()
-    mail_cfg      = _get_mail_cfg()
+    db_cfg = _get_db_cfg()
+    mail_cfg = _get_mail_cfg()
     instance_path = current_app.instance_path
-    pdf_folder    = current_app.config.get(
+    pdf_folder = current_app.config.get(
         "PDF_FOLDER",
         os.path.join(current_app.root_path, "static", "pdfs")
     )
-    template_dir  = os.path.join(current_app.root_path, "templates", "main")
+    template_dir = os.path.join(current_app.root_path, "templates", "main")
 
     threading.Thread(
         target=_bg_scraper,
@@ -2478,8 +1703,7 @@ def refresh_news():
     ).start()
 
     flash(
-        "News refresh started in the background. "
-        "Page will auto-update when complete.",
+        "News refresh started in the background. Page will auto-update when complete.",
         "info",
     )
     return redirect(url_for("main.all_non_published_news"))
@@ -2494,7 +1718,7 @@ def refresh_news_status():
 
 
 # ════════════════════════════════════════════════════════════════
-#  TODAY'S PUBLISHED NEWS
+# TODAY'S PUBLISHED NEWS
 # ════════════════════════════════════════════════════════════════
 
 @main_bp.route("/today-published-news")
@@ -2503,7 +1727,7 @@ def today_published_news():
     db = get_db()
     cursor = db.cursor(dictionary=True)
     today = date.today()
-    page  = max(1, int(request.args.get("page", 1)))
+    page = max(1, int(request.args.get("page", 1)))
 
     try:
         cursor.execute(
@@ -2512,7 +1736,7 @@ def today_published_news():
         )
         total = cursor.fetchone()["cnt"]
         total_pages = max(1, (total + PER_PAGE - 1) // PER_PAGE)
-        page   = min(page, total_pages)
+        page = min(page, total_pages)
         offset = (page - 1) * PER_PAGE
 
         cursor.execute(
@@ -2523,6 +1747,7 @@ def today_published_news():
             (today, PER_PAGE, offset)
         )
         news = cursor.fetchall()
+
     except Exception as e:
         flash(f"Error loading published news: {e}", "danger")
         news, total, total_pages, page = [], 0, 1, 1
@@ -2531,9 +1756,12 @@ def today_published_news():
 
     return render_template(
         "main/today_published_news.html",
-        news=news, today=today,
-        page=page, total_pages=total_pages,
-        total=total, per_page=PER_PAGE,
+        news=news,
+        today=today,
+        page=page,
+        total_pages=total_pages,
+        total=total,
+        per_page=PER_PAGE,
     )
 
 
@@ -2554,7 +1782,7 @@ def check_pdf_ready(news_id):
             "PDF_FOLDER",
             os.path.join(current_app.root_path, "static", "pdfs")
         )
-        fp    = os.path.join(pdf_folder, row["pdf_path"])
+        fp = os.path.join(pdf_folder, row["pdf_path"])
         ready = os.path.exists(fp) and os.path.getsize(fp) > 500
 
     return jsonify({"ready": ready})
@@ -2587,7 +1815,7 @@ def download_pdf(news_id):
 def send_email_today():
     db = get_db()
     cursor = db.cursor(dictionary=True)
-    today  = date.today()
+    today = date.today()
 
     try:
         cursor.execute(
@@ -2609,22 +1837,25 @@ def send_email_today():
         except Exception:
             settings = {}
 
-        mail_cfg     = _get_mail_cfg()
-        pdf_folder   = current_app.config.get(
+        mail_cfg = _get_mail_cfg()
+        pdf_folder = current_app.config.get(
             "PDF_FOLDER",
             os.path.join(current_app.root_path, "static", "pdfs")
         )
         template_dir = os.path.join(current_app.root_path, "templates", "main")
-        pdf_paths    = [
+        pdf_paths = [
             os.path.join(pdf_folder, a["pdf_path"])
             for a in articles if a.get("pdf_path")
         ]
         pub_ids = [a["id"] for a in articles]
 
         _send_email_bg(
-            articles=list(articles), pub_ids=pub_ids,
-            pdf_paths=pdf_paths, settings=dict(settings),
-            mail_cfg=mail_cfg, template_dir=template_dir,
+            articles=list(articles),
+            pub_ids=pub_ids,
+            pdf_paths=pdf_paths,
+            settings=dict(settings),
+            mail_cfg=mail_cfg,
+            template_dir=template_dir,
         )
         flash("Email sent successfully.", "success")
 
@@ -2638,7 +1869,7 @@ def send_email_today():
 
 
 # ════════════════════════════════════════════════════════════════
-#  USER SETTINGS
+# USER SETTINGS
 # ════════════════════════════════════════════════════════════════
 
 @main_bp.route("/user-settings", methods=["GET", "POST"])
@@ -2649,12 +1880,12 @@ def user_settings():
 
     if request.method == "POST":
         try:
-            sched_all          = _parse_sched_from_form(request.form, "all")
+            sched_all = _parse_sched_from_form(request.form, "all")
             sched_agricultural = _parse_sched_from_form(request.form, "agricultural")
-            sched_weather      = _parse_sched_from_form(request.form, "weather")
-            sched_financial    = _parse_sched_from_form(request.form, "financial")
-            sched_energy       = _parse_sched_from_form(request.form, "energy")
-            sched_global       = _parse_sched_from_form(request.form, "global")
+            sched_weather = _parse_sched_from_form(request.form, "weather")
+            sched_financial = _parse_sched_from_form(request.form, "financial")
+            sched_energy = _parse_sched_from_form(request.form, "energy")
+            sched_global = _parse_sched_from_form(request.form, "global")
 
             cursor.execute(
                 """
@@ -2683,12 +1914,15 @@ def user_settings():
                     request.form.get("publish_mode", "manual"),
                     ",".join(request.form.getlist("content_categories")) or "all",
                     1 if request.form.get("sync_all_schedules") else 0,
-                    sched_all, sched_agricultural, sched_weather,
-                    sched_financial, sched_energy, sched_global,
+                    sched_all,
+                    sched_agricultural,
+                    sched_weather,
+                    sched_financial,
+                    sched_energy,
+                    sched_global,
                     request.form.get("email_recipient", "").strip(),
                     request.form.get("email_cc", "").strip(),
-                    request.form.get("email_subject_prefix",
-                                     "Daily News Alert").strip(),
+                    request.form.get("email_subject_prefix", "Daily News Alert").strip(),
                     1 if request.form.get("email_on_publish") else 0,
                 )
             )
@@ -2702,7 +1936,6 @@ def user_settings():
             cursor.close()
         return redirect(url_for("main.user_settings"))
 
-    # GET — load and deserialise schedule JSON for template
     try:
         cursor.execute("SELECT * FROM user_settings WHERE id=1")
         settings = cursor.fetchone() or {}
@@ -2713,11 +1946,7 @@ def user_settings():
 
     for cat in ("all", "agricultural", "weather", "financial", "energy", "global"):
         col = f"schedule_{cat}"
-        raw = (settings.get(col) or "").strip()
-        try:
-            settings[col] = json.loads(raw) if raw and raw != "{}" else {}
-        except Exception:
-            settings[col] = {}
+        settings[col] = _safe_json_load(settings.get(col))
 
     return render_template("main/user_settings.html", settings=settings)
 
