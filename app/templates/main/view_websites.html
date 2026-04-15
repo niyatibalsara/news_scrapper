@@ -44,9 +44,9 @@
             <input class="tbl-search-input" type="text" id="searchInput" placeholder="Search Websites…" oninput="filterTable()" />
           </div>
 
-          <button type="button" class="btn btn-primary" onclick="showAddRow()">+ Add Websites</button>
-          <button type="button" class="btn btn-primary" onclick="submitEdit()">+ Edit</button>
-          <button type="button" class="btn btn-primary" onclick="submitBulkDelete()">+ Delete</button>
+          <button type="button" class="btn btn-primary" onclick="showAddRow()">Add Websites</button>
+          <button type="button" class="btn btn-primary" onclick="submitEdit()">Edit</button>
+          <button type="button" class="btn btn-primary" onclick="submitBulkDelete()">Delete</button>
         </div>
       </div>
 
@@ -64,7 +64,7 @@
 
           <tbody id="keywords-tbody">
 
-            <!-- ADD ROW (hidden by default) -->
+            <!-- ADD ROW (hidden by default)
             <tr id="add-row" style="display: none;">
               <td colspan="3">
                 <div style="display: grid; grid-template-columns: 120px 1fr auto auto; gap: 12px; align-items: center;">
@@ -87,7 +87,22 @@
                   <button type="button" class="btn btn-ghost" onclick="hideAddRow()">Cancel</button>
                 </div>
               </td>
-            </tr>
+            </tr> -->
+            <tr id="add-row" style="display: none;">
+  <td colspan="3">
+    <div style="display:grid;grid-template-columns:1fr auto auto;gap:12px;align-items:center;">
+      <input
+        type="text"
+        name="websites"
+        id="add-websites"
+        placeholder="Enter website URL e.g. https://www.ndtv.com/latest"
+        style="width:100%;padding:10px 12px;border:1px solid #dce4f5;border-radius:8px;font-size:0.88rem;"
+      >
+      <button type="button" class="btn btn-primary" onclick="submitAdd()">Add</button>
+      <button type="button" class="btn btn-ghost" onclick="hideAddRow()">Cancel</button>
+    </div>
+  </td>
+</tr>
 
             {% if websites %}
               {% for item in websites %}
@@ -158,25 +173,18 @@
     document.getElementById('add-sr-no').focus();
   }
 
-  function hideAddRow() {
-    document.getElementById('add-row').style.display = 'none';
-    document.getElementById('add-sr-no').value = '';
-    document.getElementById('add-websites').value = '';
-  }
-
   function submitAdd() {
-    const srNo = document.getElementById('add-sr-no').value.trim();
-    const kw   = document.getElementById('add-websites').value.trim();
-
-    if (!srNo || !kw) {
-      alert('Both Sr. No and websites are required.');
-      return;
-    }
-
+    const val = document.getElementById('add-websites').value.trim();
+    if (!val) { alert('Website URL is required.'); return; }
     document.getElementById('form-action').value = 'add';
     document.getElementById('main-form').submit();
-  }
+}
 
+function hideAddRow() {
+    document.getElementById('add-row').style.display = 'none';
+    document.getElementById('add-websites').value = '';
+}
+    
   // ── EDIT ─────────────────────────────────────────────
   // Blue "+ Edit" button: checks selected checkbox, opens that row for editing
   function submitEdit() {

@@ -674,57 +674,153 @@ def home():
     )
 
 
-# ── Keywords ──────────────────────────────────────────────────
+# # ── Keywords ──────────────────────────────────────────────────
+# @main_bp.route("/view-keywords", methods=["GET", "POST"])
+# @login_required
+# def view_keywords():
+#     db = get_db()
+#     cursor = db.cursor(dictionary=True)
+#     if request.method == "POST":
+#         action = request.form.get("action")  
+#         if action == "add":
+#             kw = request.form.get("keyword", "").strip()
+#             if not kw:
+#                 flash("Keyword is required.", "danger")
+#             else:
+#                 try:
+#                     cursor.execute("SELECT COALESCE(MAX(sr_no), 0) + 1 AS next_sr FROM keywords")
+#                     next_sr = cursor.fetchone()["next_sr"]
+#                     cursor.execute("INSERT INTO keywords(sr_no,keyword) VALUES(%s,%s)", (next_sr, kw))
+#                     db.commit()
+#                     flash("Keyword added.", "success")
+#                 except Exception as e:
+#                     db.rollback()
+#                     flash(f"Error: {e}", "danger")
+#             cursor.close()
+#             return redirect(url_for("main.view_keywords"))
+#         # if action == "add":
+#         #     sr_no = request.form.get("sr_no", "").strip()
+#         #     kw    = request.form.get("keyword", "").strip()
+#         #     if not sr_no or not kw:
+#         #         flash("Both Sr. No and Keyword are required.", "danger")
+#         #     else:
+#         #         try:
+#         #             sr_no = int(sr_no)
+#         #             cursor.execute("SELECT id FROM keywords WHERE sr_no=%s", (sr_no,))
+#         #             if cursor.fetchone():
+#         #                 flash("Sr. No already exists.", "danger")
+#         #             else:
+#         #                 cursor.execute(
+#         #                     "INSERT INTO keywords(sr_no,keyword) VALUES(%s,%s)",
+#         #                     (sr_no, kw)
+#         #                 )
+#         #                 db.commit()
+#         #                 flash("Keyword added.", "success")
+#         #         except ValueError:
+#         #             flash("Sr. No must be a number.", "danger")
+#         #         except Exception as e:
+#         #             db.rollback()
+#         #             flash(f"Error: {e}", "danger")
+#         #     cursor.close()
+#         #     return redirect(url_for("main.view_keywords"))
+#     elif action == "edit":
+#         kid = request.form.get("keyword_id", "").strip()
+#         kw  = request.form.get("edit_keyword", "").strip()
+#         if not kid or not kw:
+#             flash("Keyword ID and value required.", "danger")
+#         else:
+#             try:
+#                 cursor.execute("UPDATE keywords SET keyword=%s WHERE id=%s", (kw, kid))
+#                 db.commit()
+#                 flash("Updated." if cursor.rowcount else "Not found.",
+#                       "success" if cursor.rowcount else "warning")
+#             except Exception as e:
+#                 db.rollback()
+#                 flash(f"Error: {e}", "danger")
+#             cursor.close()
+#             return redirect(url_for("main.view_keywords"))
+#     elif action == "bulk_delete":
+#                  ids = request.form.getlist("selected_keywords")
+#     if not ids:
+#                 flash("Select at least one.", "warning")
+#     else:
+#                 try:
+#                     ph = ",".join(["%s"] * len(ids))
+#                     cursor.execute(f"DELETE FROM keywords WHERE id IN ({ph})", tuple(ids))
+#                     db.commit()
+#                     flash("Deleted.", "success")
+#                 except Exception as e:
+#                     db.rollback()
+#                     flash(f"Error: {e}", "danger")
+#     cursor.close()
+#     return redirect(url_for("main.view_keywords"))
+#     cursor.execute("SELECT id,sr_no,keyword FROM keywords ORDER BY sr_no ASC")
+#     keywords = cursor.fetchall()
+#     cursor.close()
+#     return render_template("main/view_keywords.html", keywords=keywords)
+
 @main_bp.route("/view-keywords", methods=["GET", "POST"])
 @login_required
 def view_keywords():
     db = get_db()
     cursor = db.cursor(dictionary=True)
+
     if request.method == "POST":
         action = request.form.get("action")
+
         if action == "add":
-            sr_no = request.form.get("sr_no", "").strip()
-            kw    = request.form.get("keyword", "").strip()
-            if not sr_no or not kw:
-                flash("Both Sr. No and Keyword are required.", "danger")
+            kw = request.form.get("keyword", "").strip()
+
+            if not kw:
+                flash("Keyword is required.", "danger")
             else:
                 try:
-                    sr_no = int(sr_no)
-                    cursor.execute("SELECT id FROM keywords WHERE sr_no=%s", (sr_no,))
-                    if cursor.fetchone():
-                        flash("Sr. No already exists.", "danger")
-                    else:
-                        cursor.execute(
-                            "INSERT INTO keywords(sr_no,keyword) VALUES(%s,%s)",
-                            (sr_no, kw)
-                        )
-                        db.commit()
-                        flash("Keyword added.", "success")
-                except ValueError:
-                    flash("Sr. No must be a number.", "danger")
+                    cursor.execute("SELECT COALESCE(MAX(sr_no), 0) + 1 AS next_sr FROM keywords")
+                    next_sr = cursor.fetchone()["next_sr"]
+
+                    cursor.execute(
+                        "INSERT INTO keywords(sr_no, keyword) VALUES(%s, %s)",
+                        (next_sr, kw)
+                    )
+                    db.commit()
+                    flash("Keyword added.", "success")
+
                 except Exception as e:
                     db.rollback()
                     flash(f"Error: {e}", "danger")
+
             cursor.close()
             return redirect(url_for("main.view_keywords"))
+
         elif action == "edit":
             kid = request.form.get("keyword_id", "").strip()
-            kw  = request.form.get("edit_keyword", "").strip()
+            kw = request.form.get("edit_keyword", "").strip()
+
             if not kid or not kw:
                 flash("Keyword ID and value required.", "danger")
             else:
                 try:
-                    cursor.execute("UPDATE keywords SET keyword=%s WHERE id=%s", (kw, kid))
+                    cursor.execute(
+                        "UPDATE keywords SET keyword=%s WHERE id=%s",
+                        (kw, kid)
+                    )
                     db.commit()
-                    flash("Updated." if cursor.rowcount else "Not found.",
-                          "success" if cursor.rowcount else "warning")
+
+                    if cursor.rowcount:
+                        flash("Updated.", "success")
+                    else:
+                        flash("Not found.", "warning")
+
                 except Exception as e:
                     db.rollback()
                     flash(f"Error: {e}", "danger")
+
             cursor.close()
             return redirect(url_for("main.view_keywords"))
+
         elif action == "bulk_delete":
             ids = request.form.getlist("selected_keywords")
+
             if not ids:
                 flash("Select at least one.", "warning")
             else:
@@ -733,17 +829,19 @@ def view_keywords():
                     cursor.execute(f"DELETE FROM keywords WHERE id IN ({ph})", tuple(ids))
                     db.commit()
                     flash("Deleted.", "success")
+
                 except Exception as e:
                     db.rollback()
                     flash(f"Error: {e}", "danger")
+
             cursor.close()
             return redirect(url_for("main.view_keywords"))
-    cursor.execute("SELECT id,sr_no,keyword FROM keywords ORDER BY sr_no ASC")
+
+    cursor.execute("SELECT id, sr_no, keyword FROM keywords ORDER BY sr_no ASC")
     keywords = cursor.fetchall()
     cursor.close()
+
     return render_template("main/view_keywords.html", keywords=keywords)
-
-
 # ── Websites ───────────────────────────────────────────────────
 @main_bp.route("/view-websites", methods=["GET", "POST"])
 @login_required
@@ -752,31 +850,45 @@ def view_websites():
     cursor = db.cursor(dictionary=True)
     if request.method == "POST":
         action = request.form.get("action")
+        # if action == "add":
+        #     sr_no = request.form.get("sr_no", "").strip()
+        #     val   = request.form.get("websites", "").strip()
+        #     if not sr_no or not val:
+        #         flash("Both fields required.", "danger")
+        #     else:
+        #         try:
+        #             sr_no = int(sr_no)
+        #             cursor.execute("SELECT id FROM websites WHERE sr_no=%s", (sr_no,))
+        #             if cursor.fetchone():
+        #                 flash("Sr. No exists.", "danger")
+        #             else:
+        #                 cursor.execute(
+        #                     "INSERT INTO websites(sr_no,websites) VALUES(%s,%s)",
+        #                     (sr_no, val)
+        #                 )
+        #                 db.commit()
+        #                 flash("Website added.", "success")
+        #         except ValueError:
+        #             flash("Sr. No must be a number.", "danger")
+        #         except Exception as e:
+        #             db.rollback()
+        #             flash(f"Error: {e}", "danger")
+        #     cursor.close()
+        #     return redirect(url_for("main.view_websites"))
         if action == "add":
-            sr_no = request.form.get("sr_no", "").strip()
-            val   = request.form.get("websites", "").strip()
-            if not sr_no or not val:
-                flash("Both fields required.", "danger")
+            val = request.form.get("websites", "").strip()
+            if not val:
+                flash("Website is required.", "danger")
             else:
                 try:
-                    sr_no = int(sr_no)
-                    cursor.execute("SELECT id FROM websites WHERE sr_no=%s", (sr_no,))
-                    if cursor.fetchone():
-                        flash("Sr. No exists.", "danger")
-                    else:
-                        cursor.execute(
-                            "INSERT INTO websites(sr_no,websites) VALUES(%s,%s)",
-                            (sr_no, val)
-                        )
-                        db.commit()
-                        flash("Website added.", "success")
-                except ValueError:
-                    flash("Sr. No must be a number.", "danger")
+                    cursor.execute("SELECT COALESCE(MAX(sr_no), 0) + 1 AS next_sr FROM websites")
+                    next_sr = cursor.fetchone()["next_sr"]
+                    cursor.execute("INSERT INTO websites(sr_no,websites) VALUES(%s,%s)", (next_sr, val))
+                    db.commit()
+                    flash("Website added.", "success")
                 except Exception as e:
                     db.rollback()
                     flash(f"Error: {e}", "danger")
-            cursor.close()
-            return redirect(url_for("main.view_websites"))
         elif action == "edit":
             wid = request.form.get("websites_id", "").strip()
             val = request.form.get("edit_websites", "").strip()
@@ -814,57 +926,153 @@ def view_websites():
     return render_template("main/view_websites.html", websites=websites)
 
 
-# ── News Type ──────────────────────────────────────────────────
+# # ── News Type ──────────────────────────────────────────────────
+# @main_bp.route("/view-news-type", methods=["GET", "POST"])
+# @login_required
+# def view_news_type():
+#     db = get_db()
+#     cursor = db.cursor(dictionary=True)
+#     if request.method == "POST":
+#         action = request.form.get("action")
+#         # if action == "add":
+#         #     sr_no = request.form.get("sr_no", "").strip()
+#         #     val   = request.form.get("news_type", "").strip()
+#         #     if not sr_no or not val:
+#         #         flash("Both fields required.", "danger")
+#         #     else:
+#         #         try:
+#         #             sr_no = int(sr_no)
+#         #             cursor.execute("SELECT id FROM news WHERE sr_no=%s", (sr_no,))
+#         #             if cursor.fetchone():
+#         #                 flash("Sr. No exists.", "danger")
+#         #             else:
+#         #                 cursor.execute(
+#         #                     "INSERT INTO news(sr_no,news_type) VALUES(%s,%s)",
+#         #                     (sr_no, val)
+#         #                 )
+#         #                 db.commit()
+#         #                 flash("News type added.", "success")
+#         #         except ValueError:
+#         #             flash("Sr. No must be a number.", "danger")
+#         #         except Exception as e:
+#         #             db.rollback()
+#         #             flash(f"Error: {e}", "danger")
+#         #     cursor.close()
+#         #     return redirect(url_for("main.view_news_type"))
+#     if action == "add":
+#         val = request.form.get("news_type", "").strip()
+#         if not val:
+#             flash("News type is required.", "danger")
+#         else:
+#             try:
+#                 cursor.execute("SELECT COALESCE(MAX(sr_no), 0) + 1 AS next_sr FROM news")
+#                 next_sr = cursor.fetchone()["next_sr"]
+#                 cursor.execute("INSERT INTO news(sr_no,news_type) VALUES(%s,%s)", (next_sr, val))
+#                 db.commit()
+#                 flash("News type added.", "success")
+#             except Exception as e:
+#                 db.rollback()
+#                 flash(f"Error: {e}", "danger")
+#         cursor.close()
+#         return redirect(url_for("main.view_news_type"))
+#     elif action == "edit":
+#         ntid = request.form.get("news_type_id", "").strip()
+#         val  = request.form.get("edit_news_type", "").strip()
+#         if not ntid or not val:
+#             flash("Both fields required.", "danger")
+#         else:
+#             try:
+#                 cursor.execute("UPDATE news SET news_type=%s WHERE id=%s", (val, ntid))
+#                 db.commit()
+#                 flash("Updated." if cursor.rowcount else "Not found.",
+#                       "success" if cursor.rowcount else "warning")
+#             except Exception as e:
+#                 db.rollback()
+#                 flash(f"Error: {e}", "danger")
+#         cursor.close()
+#         return redirect(url_for("main.view_news_type"))
+#     elif action == "bulk_delete":
+#         ids = request.form.getlist("selected_news_types")
+#         if not ids:
+#             flash("Select at least one.", "warning")
+#         else:
+#             try:
+#                 ph = ",".join(["%s"] * len(ids))
+#                 cursor.execute(f"DELETE FROM news WHERE id IN ({ph})", tuple(ids))
+#                 db.commit()
+#                 flash("Deleted.", "success")
+#             except Exception as e:
+#                 db.rollback()
+#                 flash(f"Error: {e}", "danger")
+#         cursor.close()
+#         return redirect(url_for("main.view_news_type"))
+#     cursor.execute("SELECT id,sr_no,news_type FROM news ORDER BY sr_no ASC")
+#     news_types = cursor.fetchall()
+#     cursor.close()
+#     return render_template("main/view_news_type.html", news_types=news_types)
+
 @main_bp.route("/view-news-type", methods=["GET", "POST"])
 @login_required
 def view_news_type():
     db = get_db()
     cursor = db.cursor(dictionary=True)
+
     if request.method == "POST":
         action = request.form.get("action")
+
         if action == "add":
-            sr_no = request.form.get("sr_no", "").strip()
-            val   = request.form.get("news_type", "").strip()
-            if not sr_no or not val:
-                flash("Both fields required.", "danger")
+            val = request.form.get("news_type", "").strip()
+
+            if not val:
+                flash("News type is required.", "danger")
             else:
                 try:
-                    sr_no = int(sr_no)
-                    cursor.execute("SELECT id FROM news WHERE sr_no=%s", (sr_no,))
-                    if cursor.fetchone():
-                        flash("Sr. No exists.", "danger")
-                    else:
-                        cursor.execute(
-                            "INSERT INTO news(sr_no,news_type) VALUES(%s,%s)",
-                            (sr_no, val)
-                        )
-                        db.commit()
-                        flash("News type added.", "success")
-                except ValueError:
-                    flash("Sr. No must be a number.", "danger")
+                    cursor.execute("SELECT COALESCE(MAX(sr_no), 0) + 1 AS next_sr FROM news")
+                    next_sr = cursor.fetchone()["next_sr"]
+
+                    cursor.execute(
+                        "INSERT INTO news(sr_no, news_type) VALUES(%s, %s)",
+                        (next_sr, val)
+                    )
+                    db.commit()
+                    flash("News type added.", "success")
+
                 except Exception as e:
                     db.rollback()
                     flash(f"Error: {e}", "danger")
+
             cursor.close()
             return redirect(url_for("main.view_news_type"))
+
         elif action == "edit":
             ntid = request.form.get("news_type_id", "").strip()
-            val  = request.form.get("edit_news_type", "").strip()
+            val = request.form.get("edit_news_type", "").strip()
+
             if not ntid or not val:
                 flash("Both fields required.", "danger")
             else:
                 try:
-                    cursor.execute("UPDATE news SET news_type=%s WHERE id=%s", (val, ntid))
+                    cursor.execute(
+                        "UPDATE news SET news_type=%s WHERE id=%s",
+                        (val, ntid)
+                    )
                     db.commit()
-                    flash("Updated." if cursor.rowcount else "Not found.",
-                          "success" if cursor.rowcount else "warning")
+
+                    if cursor.rowcount:
+                        flash("Updated.", "success")
+                    else:
+                        flash("Not found.", "warning")
+
                 except Exception as e:
                     db.rollback()
                     flash(f"Error: {e}", "danger")
+
             cursor.close()
             return redirect(url_for("main.view_news_type"))
+
         elif action == "bulk_delete":
             ids = request.form.getlist("selected_news_types")
+
             if not ids:
                 flash("Select at least one.", "warning")
             else:
@@ -873,68 +1081,167 @@ def view_news_type():
                     cursor.execute(f"DELETE FROM news WHERE id IN ({ph})", tuple(ids))
                     db.commit()
                     flash("Deleted.", "success")
+
                 except Exception as e:
                     db.rollback()
                     flash(f"Error: {e}", "danger")
+
             cursor.close()
             return redirect(url_for("main.view_news_type"))
-    cursor.execute("SELECT id,sr_no,news_type FROM news ORDER BY sr_no ASC")
+
+    cursor.execute("SELECT id, sr_no, news_type FROM news ORDER BY sr_no ASC")
     news_types = cursor.fetchall()
     cursor.close()
+
     return render_template("main/view_news_type.html", news_types=news_types)
 
-
-# ── Commodity ──────────────────────────────────────────────────
+# # ── Commodity ──────────────────────────────────────────────────
+# @main_bp.route("/view-commodity", methods=["GET", "POST"])
+# @login_required
+# def view_commodity():
+#     db = get_db()
+#     cursor = db.cursor(dictionary=True)
+#     if request.method == "POST":
+#         action = request.form.get("action")
+#         # if action == "add":
+#         #     sr_no = request.form.get("sr_no", "").strip()
+#         #     val   = request.form.get("commodity", "").strip()
+#         #     if not sr_no or not val:
+#         #         flash("Both fields required.", "danger")
+#         #     else:
+#         #         try:
+#         #             sr_no = int(sr_no)
+#         #             cursor.execute("SELECT id FROM commodity WHERE sr_no=%s", (sr_no,))
+#         #             if cursor.fetchone():
+#         #                 flash("Sr. No exists.", "danger")
+#         #             else:
+#         #                 cursor.execute(
+#         #                     "INSERT INTO commodity(sr_no,commodity) VALUES(%s,%s)",
+#         #                     (sr_no, val)
+#         #                 )
+#         #                 db.commit()
+#         #                 flash("Commodity added.", "success")
+#         #         except ValueError:
+#         #             flash("Sr. No must be a number.", "danger")
+#         #         except Exception as e:
+#         #             db.rollback()
+#         #             flash(f"Error: {e}", "danger")
+#         #     cursor.close()
+#         #     return redirect(url_for("main.view_commodity"))
+#     if action == "add":
+#         val = request.form.get("commodity", "").strip()
+#         if not val:
+#             flash("Commodity is required.", "danger")
+#         else:
+#             try:
+#                 cursor.execute("SELECT COALESCE(MAX(sr_no), 0) + 1 AS next_sr FROM commodity")
+#                 next_sr = cursor.fetchone()["next_sr"]
+#                 cursor.execute("INSERT INTO commodity(sr_no,commodity) VALUES(%s,%s)", (next_sr, val))
+#                 db.commit()
+#                 flash("Commodity added.", "success")
+#             except Exception as e:
+#                 db.rollback()
+#                 flash(f"Error: {e}", "danger")
+#         cursor.close()
+#         return redirect(url_for("main.view_commodity"))
+#     elif action == "edit":
+#         cid = request.form.get("commodity_id", "").strip()
+#         val = request.form.get("edit_commodity", "").strip()
+#         if not cid or not val:
+#             flash("Both fields required.", "danger")
+#         else:
+#             try:
+#                 cursor.execute("UPDATE commodity SET commodity=%s WHERE id=%s", (val, cid))
+#                 db.commit()
+#                 flash("Updated." if cursor.rowcount else "Not found.",
+#                       "success" if cursor.rowcount else "warning")
+#             except Exception as e:
+#                 db.rollback()
+#                 flash(f"Error: {e}", "danger")
+#         cursor.close()
+#         return redirect(url_for("main.view_commodity"))
+#     elif action == "bulk_delete":
+#         ids = request.form.getlist("selected_commodities")
+#         if not ids:
+#             flash("Select at least one.", "warning")
+#         else:
+#             try:
+#                 ph = ",".join(["%s"] * len(ids))
+#                 cursor.execute(f"DELETE FROM commodity WHERE id IN ({ph})", tuple(ids))
+#                 db.commit()
+#                 flash("Deleted.", "success")
+#             except Exception as e:
+#                 db.rollback()
+#                 flash(f"Error: {e}", "danger")
+#         cursor.close()
+#         return redirect(url_for("main.view_commodity"))
+#     cursor.execute("SELECT id,sr_no,commodity FROM commodity ORDER BY sr_no ASC")
+#     commodities = cursor.fetchall()
+#     cursor.close()
+#     return render_template("main/view_commodity.html", commodities=commodities)
 @main_bp.route("/view-commodity", methods=["GET", "POST"])
 @login_required
 def view_commodity():
     db = get_db()
     cursor = db.cursor(dictionary=True)
+    action = None  # Default value so GET requests do not fail
+
     if request.method == "POST":
         action = request.form.get("action")
+
         if action == "add":
-            sr_no = request.form.get("sr_no", "").strip()
-            val   = request.form.get("commodity", "").strip()
-            if not sr_no or not val:
-                flash("Both fields required.", "danger")
+            val = request.form.get("commodity", "").strip()
+
+            if not val:
+                flash("Commodity is required.", "danger")
             else:
                 try:
-                    sr_no = int(sr_no)
-                    cursor.execute("SELECT id FROM commodity WHERE sr_no=%s", (sr_no,))
-                    if cursor.fetchone():
-                        flash("Sr. No exists.", "danger")
-                    else:
-                        cursor.execute(
-                            "INSERT INTO commodity(sr_no,commodity) VALUES(%s,%s)",
-                            (sr_no, val)
-                        )
-                        db.commit()
-                        flash("Commodity added.", "success")
-                except ValueError:
-                    flash("Sr. No must be a number.", "danger")
+                    cursor.execute("SELECT COALESCE(MAX(sr_no), 0) + 1 AS next_sr FROM commodity")
+                    next_sr = cursor.fetchone()["next_sr"]
+
+                    cursor.execute(
+                        "INSERT INTO commodity(sr_no, commodity) VALUES(%s, %s)",
+                        (next_sr, val)
+                    )
+                    db.commit()
+                    flash("Commodity added.", "success")
+
                 except Exception as e:
                     db.rollback()
                     flash(f"Error: {e}", "danger")
+
             cursor.close()
             return redirect(url_for("main.view_commodity"))
+
         elif action == "edit":
             cid = request.form.get("commodity_id", "").strip()
             val = request.form.get("edit_commodity", "").strip()
+
             if not cid or not val:
-                flash("Both fields required.", "danger")
+                flash("Both fields are required.", "danger")
             else:
                 try:
-                    cursor.execute("UPDATE commodity SET commodity=%s WHERE id=%s", (val, cid))
+                    cursor.execute(
+                        "UPDATE commodity SET commodity=%s WHERE id=%s",
+                        (val, cid)
+                    )
                     db.commit()
-                    flash("Updated." if cursor.rowcount else "Not found.",
-                          "success" if cursor.rowcount else "warning")
+
+                    if cursor.rowcount:
+                        flash("Updated.", "success")
+                    else:
+                        flash("Not found.", "warning")
+
                 except Exception as e:
                     db.rollback()
                     flash(f"Error: {e}", "danger")
+
             cursor.close()
             return redirect(url_for("main.view_commodity"))
+
         elif action == "bulk_delete":
             ids = request.form.getlist("selected_commodities")
+
             if not ids:
                 flash("Select at least one.", "warning")
             else:
@@ -943,16 +1250,19 @@ def view_commodity():
                     cursor.execute(f"DELETE FROM commodity WHERE id IN ({ph})", tuple(ids))
                     db.commit()
                     flash("Deleted.", "success")
+
                 except Exception as e:
                     db.rollback()
                     flash(f"Error: {e}", "danger")
+
             cursor.close()
             return redirect(url_for("main.view_commodity"))
-    cursor.execute("SELECT id,sr_no,commodity FROM commodity ORDER BY sr_no ASC")
+
+    cursor.execute("SELECT id, sr_no, commodity FROM commodity ORDER BY sr_no ASC")
     commodities = cursor.fetchall()
     cursor.close()
-    return render_template("main/view_commodity.html", commodities=commodities)
 
+    return render_template("main/view_commodity.html", commodities=commodities)
 
 # ════════════════════════════════════════════════════════════════
 #  ALL NON-PUBLISHED NEWS

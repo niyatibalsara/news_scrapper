@@ -44,9 +44,9 @@
             <input class="tbl-search-input" type="text" id="searchInput" placeholder="Search Commodities…" oninput="filterTable()" />
           </div>
 
-          <button type="button" class="btn btn-primary" onclick="showAddRow()">+ Add Commodity</button>
-          <button type="button" class="btn btn-primary" onclick="submitEdit()">+ Edit</button>
-          <button type="button" class="btn btn-primary" onclick="submitBulkDelete()">+ Delete</button>
+          <button type="button" class="btn btn-primary" onclick="showAddRow()">Add Commodity</button>
+          <button type="button" class="btn btn-primary" onclick="submitEdit()">Edit</button>
+          <button type="button" class="btn btn-primary" onclick="submitBulkDelete()">Delete</button>
         </div>
       </div>
 
@@ -65,7 +65,7 @@
           <tbody id="commodity-tbody">
 
             <!-- ADD ROW (hidden by default) -->
-            <tr id="add-row" style="display: none;">
+            <!-- <tr id="add-row" style="display: none;">
               <td colspan="3">
                 <div style="display: grid; grid-template-columns: 120px 1fr auto auto; gap: 12px; align-items: center;">
                   <input
@@ -87,7 +87,22 @@
                   <button type="button" class="btn btn-ghost" onclick="hideAddRow()">Cancel</button>
                 </div>
               </td>
-            </tr>
+            </tr> -->
+            <tr id="add-row" style="display: none;">
+  <td colspan="3">
+    <div style="display:grid;grid-template-columns:1fr auto auto;gap:12px;align-items:center;">
+      <input
+        type="text"
+        name="commodity"
+        id="add-commodity"
+        placeholder="Enter commodity"
+        style="width:100%;padding:10px 12px;border:1px solid #dce4f5;border-radius:8px;font-size:0.88rem;"
+      >
+      <button type="button" class="btn btn-primary" onclick="submitAdd()">Add</button>
+      <button type="button" class="btn btn-ghost" onclick="hideAddRow()">Cancel</button>
+    </div>
+  </td>
+</tr>
 
             {% if commodities %}
               {% for item in commodities %}
@@ -157,20 +172,30 @@
     document.getElementById('add-sr-no').focus();
   }
 
-  function hideAddRow() {
-    document.getElementById('add-row').style.display = 'none';
-    document.getElementById('add-sr-no').value = '';
-    document.getElementById('add-commodity').value = '';
-  }
+  // function hideAddRow() {
+  //   document.getElementById('add-row').style.display = 'none';
+  //   document.getElementById('add-sr-no').value = '';
+  //   document.getElementById('add-commodity').value = '';
+  // }
 
-  function submitAdd() {
-    const srNo = document.getElementById('add-sr-no').value.trim();
-    const val  = document.getElementById('add-commodity').value.trim();
-    if (!srNo || !val) { alert('Both Sr. No and Commodity are required.'); return; }
+  // function submitAdd() {
+  //   const srNo = document.getElementById('add-sr-no').value.trim();
+  //   const val  = document.getElementById('add-commodity').value.trim();
+  //   if (!srNo || !val) { alert('Both Sr. No and Commodity are required.'); return; }
+  //   document.getElementById('form-action').value = 'add';
+  //   document.getElementById('main-form').submit();
+  // }
+    function submitAdd() {
+    const val = document.getElementById('add-commodity').value.trim();
+    if (!val) { alert('commodity is required.'); return; }
     document.getElementById('form-action').value = 'add';
     document.getElementById('main-form').submit();
-  }
+}
 
+function hideAddRow() {
+    document.getElementById('add-row').style.display = 'none';
+    document.getElementById('add-commodity').value = '';
+}
   function submitEdit() {
     const checked = document.querySelectorAll('.row-checkbox:checked');
     if (checked.length === 0) { alert('Please select a row to edit.'); return; }

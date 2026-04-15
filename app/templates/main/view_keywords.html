@@ -2,6 +2,38 @@
 {% block title %}View Keywords — Seamless{% endblock %}
 
 {% block content %}
+<style>.keyword-add-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.keyword-add-input {
+  flex: 1 1 700px;
+  min-width: 280px;
+}
+
+.keyword-add-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-top: 22px;
+  flex-shrink: 0;
+}
+
+@media (max-width: 768px) {
+  .keyword-add-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .keyword-add-actions {
+    padding-top: 0;
+    justify-content: flex-start;
+  }
+}</style>
 <div class="page-container">
 
   <div class="page-head">
@@ -62,16 +94,16 @@
             />
           </div>
 
-          <button type="button" class="btn btn-primary" onclick="showAddRow()">+ Add Keywords</button>
-          <button type="button" class="btn btn-primary" onclick="submitEdit()">+ Edit</button>
-          <button type="button" class="btn btn-primary" onclick="submitBulkDelete()">+ Delete</button>
+          <button type="button" class="btn btn-primary" onclick="showAddRow()">Add Keywords</button>
+          <button type="button" class="btn btn-primary" onclick="submitEdit()">Edit</button>
+          <button type="button" class="btn btn-primary" onclick="submitBulkDelete()">Delete</button>
         </div>
       </div>
 
-      <!-- ADD ROW (hidden by default) -->
+      <!-- ADD ROW (hidden by default)
       <div id="add-row" style="display:none;padding:16px 22px;border-bottom:1px solid var(--border);background:#f8faff;">
         <div style="display:grid;grid-template-columns:110px 1fr auto auto;gap:12px;align-items:start;">
-          <div>
+          <!-- <div>
             <label style="font-size:0.75rem;font-weight:700;color:var(--text-muted);display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.06em;">Sr. No</label>
             <input
               type="number"
@@ -81,9 +113,9 @@
               min="1"
               style="width:100%;padding:9px 12px;border:1px solid #dce4f5;border-radius:10px;font-size:0.88rem;outline:none;"
             >
-          </div>
+          </div> -->
 
-          <div>
+          <!-- <div>
             <label style="font-size:0.75rem;font-weight:700;color:var(--text-muted);display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.06em;">
               Keywords <span style="font-weight:500;opacity:0.65;">(max 10)</span>
             </label>
@@ -114,7 +146,38 @@
             <button type="button" class="btn btn-ghost" onclick="hideAddRow()">Cancel</button>
           </div>
         </div>
+      </div> -->
+      <div id="add-row" style="display:none;padding:16px 22px;border-bottom:1px solid var(--border);background:#f8faff;">
+  <div class="keyword-add-row">
+    <div class="keyword-add-input">
+      <label style="font-size:0.75rem;font-weight:700;color:var(--text-muted);display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.06em;">
+        Keywords <span style="font-weight:500;opacity:0.65;">(max 10)</span>
+      </label>
+
+      <div
+        id="chip-container-add"
+        style="min-height:42px;padding:5px 10px;border:1px solid #dce4f5;border-radius:10px;background:#fff;display:flex;flex-wrap:wrap;gap:5px;align-items:center;cursor:text;"
+        onclick="document.getElementById('chip-input-add').focus()"
+      >
+        <input
+          id="chip-input-add"
+          type="text"
+          placeholder="Type keyword and press Enter..."
+          style="border:none;outline:none;font-size:0.88rem;min-width:150px;flex:1;padding:2px 4px;background:transparent;"
+          onkeydown="handleChipKey(event,'add')"
+        >
       </div>
+
+      <input type="hidden" name="keyword" id="add-keyword-value" value="">
+      <div id="add-chip-counter" style="font-size:0.72rem;color:var(--text-muted);margin-top:3px;">0 / 10 keywords</div>
+    </div>
+
+    <div class="keyword-add-actions">
+      <button type="button" class="btn btn-primary" onclick="submitAdd()">Add</button>
+      <button type="button" class="btn btn-ghost" onclick="hideAddRow()">Cancel</button>
+    </div>
+  </div>
+</div>
 
       <div class="tbl-wrap">
         <table class="seamless-table" id="keywords-table">
@@ -446,21 +509,50 @@ function showAddRow() {
   document.getElementById('add-sr-no').focus();
 }
 
-function hideAddRow() {
-  document.getElementById('add-row').style.display = 'none';
-  document.getElementById('add-sr-no').value = '';
+// function hideAddRow() {
+//   document.getElementById('add-row').style.display = 'none';
+//   document.getElementById('add-sr-no').value = '';
+//   setChips('add', []);
+//   renderChips('add');
+// }
+// function hideAddRow() {
+//     document.getElementById('add-row').style.display = 'none';
+//     document.getElementById('add-websites').value = '';
+// }
+
+// function submitAdd() {
+//   const srNo = document.getElementById('add-sr-no').value.trim();
+//   const chips = getChips('add');
+
+  // if (!srNo) {
+  //   alert('Sr. No is required.');
+  //   return;
+  // }
+
+//   if (!chips.length) {
+//     alert('Add at least one keyword.');
+//     return;
+//   }
+
+//   document.getElementById('add-keyword-value').value = chips.join(', ');
+//   document.getElementById('form-action').value = 'add';
+//   document.getElementById('main-form').submit();
+// }
+function showAddRow() {
   setChips('add', []);
   renderChips('add');
+  document.getElementById('add-row').style.display = 'block';
+  document.getElementById('chip-input-add').focus();
 }
 
+function hideAddRow() {
+  document.getElementById('add-row').style.display = 'none';
+  setChips('add', []);
+  renderChips('add');
+  document.getElementById('add-keyword-value').value = '';
+}
 function submitAdd() {
-  const srNo = document.getElementById('add-sr-no').value.trim();
   const chips = getChips('add');
-
-  if (!srNo) {
-    alert('Sr. No is required.');
-    return;
-  }
 
   if (!chips.length) {
     alert('Add at least one keyword.');
@@ -471,7 +563,6 @@ function submitAdd() {
   document.getElementById('form-action').value = 'add';
   document.getElementById('main-form').submit();
 }
-
 // ── EDIT ──────────────────────────────────────────────────────
 function submitEdit() {
   const checked = document.querySelectorAll('.row-checkbox:checked');
